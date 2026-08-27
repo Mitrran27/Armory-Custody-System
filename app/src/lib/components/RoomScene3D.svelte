@@ -1,0 +1,365 @@
+<script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
+	import * as THREE from 'three';
+	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+	import type { CameraConfig, DoorConfig, QrScannerConfig, RackWall, RoomConfig, ZoneId, ZoneStatus } from '$lib/types';
+
+	let {
+		rooms,
+		doors,
+		qrScanner,
+		cameraLayout,
+		zoneStatus,
+		selectedCameraId = $bindable(null)
+	}: {
+		rooms: RoomConfig[];
+		doors: DoorConfig[];
+		qrScanner?: QrScannerConfig;
+		cameraLayout: CameraConfig[];
+		zoneStatus: Record<ZoneId, { status: ZoneStatus }>;
+		selectedCameraId?: string | null;
+	} = $props();
+
+	let container: HTMLDivElement;
+	let scene: THREE.Scene;
+	let camera: THREE.PerspectiveCamera;
+	let renderer: THREE.WebGLRenderer;
+	let controls: OrbitControls;
+	let frameId: number;
+	let resizeObserver: ResizeObserver;
+
+	const floorMats = new Map<ZoneId, THREE.MeshStandardMaterial>();
+	const camNodes = new Map<string, { cone: THREE.Mesh; ring: THREE.Mesh }>();
+
+	const STATUS_COLOR: Record<ZoneStatus, number> = {
+		clear: 0x34c77b,
+		occupied: 0xe8a33d,
+		alert: 0xe5484d
+	};
+
+	const WALL_COLOR = 0x3fa9f5;
+	const WALL_THICKNESS = 0.15;
+
+	/** Returns the wall's endpoints [start, end] as [x, z] pairs, going clockwise. */
+	function wallLine(room: RoomConfig, wall: RackWall): [[number, number], [number, number]] {
+		const [w, d] = room.size;
+		const [ox, oz] = room.origin;
+		switch (wall) {
+			case 'north':
+				return [[ox, oz], [ox + w, oz]];
+			case 'south':
+				return [[ox, oz + d], [ox + w, oz + d]];
+			case 'west':
+				return [[ox, oz], [ox, oz + d]];
+			case 'east':
+				return [[ox + w, oz], [ox + w, oz + d]];
+		}
+	}
+
+	/** Builds a wall along a line, cutting a gap for any door assigned to it. */
+	function buildWall(room: RoomConfig, wall: RackWall, height: number) {
+		const [[x1, z1], [x2, z2]] = wallLine(room, wall);
+		const length = Math.hypot(x2 - x1, z2 - z1);
+		const angle = Math.atan2(z2 - z1, x2 - x1);
+
+		const doorsOnWall = doors.filter((d) => d.room === room.id && d.wall === wall).sort((a, b) => a.t - b.t);
+
+		const edgeMat = new THREE.LineBasicMaterial({ color: WALL_COLOR, transparent: true, opacity: 0.55 });
+		const wallMat = new THREE.MeshBasicMaterial({ color: WALL_COLOR, transparent: true, opacity: 0.07, side: THREE.DoubleSide });
+
+		function addSegment(fromT: number, toT: number) {
+			const segLen = (toT - fromT) * length;
+			if (segLen <= 0.02) return;
+			const geo = new THREE.BoxGeometry(segLen, height, WALL_THICKNESS);
+			const mesh = new THREE.Mesh(geo, wallMat);
+			const midT = (fromT + toT) / 2;
+			const mx = x1 + (x2 - x1) * midT;
+			const mz = z1 + (z2 - z1) * midT;
+			mesh.position.set(mx, height / 2, mz);
+			mesh.rotation.y = -angle;
+			scene.add(mesh);
+			const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+			edges.position.copy(mesh.position);
+			edges.rotation.copy(mesh.rotation);
+			scene.add(edges);
+		}
+
+		let cursor = 0;
+		for (const d of doorsOnWall) {
+			const halfWidthT = d.width / 2 / length;
+			addSegment(cursor, Math.max(cursor, d.t - halfWidthT));
+			buildDoorMarker(d, x1 + (x2 - x1) * d.t, z1 + (z2 - z1) * d.t, angle);
+			cursor = Math.min(1, d.t + halfWidthT);
+		}
+		addSegment(cursor, 1);
+	}
+
+	function buildDoorMarker(door: DoorConfig, x: number, z: number, wallAngle: number) {
+		const gateColor = door.gate === 'qr' ? 0x3fa9f5 : door.gate === 'facial' ? 0xe8a33d : 0x8b98a9;
+		const stripGeo = new THREE.BoxGeometry(door.width * 0.92, 0.03, WALL_THICKNESS + 0.05);
+		const stripMat = new THREE.MeshStandardMaterial({ color: gateColor, emissive: gateColor, emissiveIntensity: 0.5 });
+		const strip = new THREE.Mesh(stripGeo, stripMat);
+		strip.position.set(x, 0.02, z);
+		strip.rotation.y = -wallAngle;
+		scene.add(strip);
+
+		const inward = inwardNormal(door.wall);
+		const label = makeLabelSprite(door.label, gateColor);
+		label.position.set(x + inward[0] * 0.9, 2.7, z + inward[1] * 0.9);
+		scene.add(label);
+	}
+
+	function buildRacks(room: RoomConfig) {
+		if (!room.racks) return;
+		const rackMat = new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.5, metalness: 0.3 });
+		for (const rackDef of room.racks) {
+			const [[x1, z1], [x2, z2]] = wallLine(room, rackDef.wall);
+			const inward = inwardNormal(rackDef.wall);
+			for (let i = 0; i < rackDef.count; i++) {
+				const t = (i + 0.5) / rackDef.count;
+				const x = x1 + (x2 - x1) * t + inward[0] * 0.35;
+				const z = z1 + (z2 - z1) * t + inward[1] * 0.35;
+				const geo = new THREE.BoxGeometry(0.12, 1.5, 0.35);
+				const mesh = new THREE.Mesh(geo, rackMat);
+				mesh.position.set(x, 0.85, z);
+				mesh.rotation.y = rackDef.wall === 'north' || rackDef.wall === 'south' ? 0 : Math.PI / 2;
+				scene.add(mesh);
+			}
+		}
+		const [ox, oz] = room.origin;
+		const [w] = room.size;
+		const label = makeLabelSprite('FIREARMS RACKS', 0xe8a33d);
+		label.position.set(ox + w / 2, 2.35, oz + 0.15);
+		scene.add(label);
+	}
+
+	function inwardNormal(wall: RackWall): [number, number] {
+		switch (wall) {
+			case 'north':
+				return [0, 1];
+			case 'south':
+				return [0, -1];
+			case 'west':
+				return [1, 0];
+			case 'east':
+				return [-1, 0];
+		}
+	}
+
+	function buildQrScanner(cfg: QrScannerConfig) {
+		const group = new THREE.Group();
+		const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3fa9f5, emissive: 0x3fa9f5, emissiveIntensity: 0.5 });
+		const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, 0.06), bodyMat);
+		body.position.set(...cfg.position);
+		group.add(body);
+		const label = makeLabelSprite(cfg.label, 0x3fa9f5);
+		label.position.set(cfg.position[0] - 0.4, cfg.position[1] + 0.35, cfg.position[2]);
+		group.add(label);
+		scene.add(group);
+	}
+
+	function buildRoom(cfg: RoomConfig) {
+		const [w, d] = cfg.size;
+		const [ox, oz] = cfg.origin;
+
+		const floorMat = new THREE.MeshStandardMaterial({
+			color: STATUS_COLOR[zoneStatus[cfg.id]?.status ?? 'clear'],
+			transparent: true,
+			opacity: 0.16,
+			roughness: 1
+		});
+		floorMats.set(cfg.id, floorMat);
+		const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorMat);
+		floor.rotation.x = -Math.PI / 2;
+		floor.position.set(ox + w / 2, 0, oz + d / 2);
+		scene.add(floor);
+
+		const grid = new THREE.GridHelper(Math.max(w, d) * 1.4, Math.round(Math.max(w, d) * 2), 0x2a3441, 0x1d2632);
+		grid.position.set(ox + w / 2, 0.01, oz + d / 2);
+		(Array.isArray(grid.material) ? grid.material : [grid.material]).forEach((m) => {
+			m.transparent = true;
+			m.opacity = 0.3;
+		});
+		scene.add(grid);
+
+		const wallsToBuild = cfg.wallsBuilt ?? (['north', 'south', 'east', 'west'] as RackWall[]);
+		wallsToBuild.forEach((wall) => buildWall(cfg, wall, cfg.height));
+
+		buildRacks(cfg);
+
+		const label = makeLabelSprite(cfg.label, 0xe4e9ef);
+		label.position.set(ox + w / 2, cfg.height + 0.6, oz + d / 2);
+		scene.add(label);
+	}
+
+	function makeLabelSprite(text: string, colorHex = 0xe4e9ef) {
+		const canvas = document.createElement('canvas');
+		canvas.width = 640;
+		canvas.height = 104;
+		const ctx = canvas.getContext('2d')!;
+		ctx.fillStyle = 'rgba(18,24,33,0.88)';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		const colorCss = `#${colorHex.toString(16).padStart(6, '0')}`;
+		ctx.strokeStyle = colorCss;
+		ctx.lineWidth = 3;
+		ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+		ctx.fillStyle = '#e4e9ef';
+		ctx.font = '600 34px "JetBrains Mono", monospace';
+		ctx.textBaseline = 'middle';
+		ctx.fillText(text.toUpperCase(), 22, canvas.height / 2);
+		const tex = new THREE.CanvasTexture(canvas);
+		const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+		const sprite = new THREE.Sprite(mat);
+		const aspect = canvas.width / canvas.height;
+		sprite.scale.set(1.7 * aspect * 0.32, 1.7 * 0.32, 1);
+		return sprite;
+	}
+
+	function buildCamera(cfg: CameraConfig) {
+		const group = new THREE.Group();
+		const online = cfg.status === 'online';
+		const color = online ? 0x3fa9f5 : 0x8b98a9;
+
+		const coneGeo = new THREE.ConeGeometry(0.12, 0.28, 12);
+		const coneMat = new THREE.MeshStandardMaterial({
+			color,
+			emissive: color,
+			emissiveIntensity: online ? 0.6 : 0.05,
+			roughness: 0.4
+		});
+		const cone = new THREE.Mesh(coneGeo, coneMat);
+		cone.position.set(...cfg.position);
+
+		const dir = new THREE.Vector3(...cfg.target).sub(new THREE.Vector3(...cfg.position)).normalize();
+		const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+		cone.quaternion.copy(quat);
+		cone.userData = { cameraId: cfg.id };
+
+		const dist = new THREE.Vector3(...cfg.target).distanceTo(new THREE.Vector3(...cfg.position));
+		const radius = Math.min(2.2, Math.tan((cfg.fovDeg * Math.PI) / 360) * dist);
+		const fovLength = Math.min(dist, radius / Math.tan((cfg.fovDeg * Math.PI) / 360));
+		const fovGeo = new THREE.ConeGeometry(radius, fovLength, 24, 1, true);
+		const fovMat = new THREE.MeshBasicMaterial({
+			color,
+			transparent: true,
+			opacity: online ? 0.05 : 0.015,
+			side: THREE.DoubleSide,
+			depthWrite: false
+		});
+		const fovCone = new THREE.Mesh(fovGeo, fovMat);
+		fovCone.position.set(...cfg.position);
+		fovCone.quaternion.copy(quat);
+		fovCone.translateY(-fovLength / 2);
+
+		const ringGeo = new THREE.TorusGeometry(0.18, 0.012, 8, 24);
+		const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: online ? 0.9 : 0.3 });
+		const ring = new THREE.Mesh(ringGeo, ringMat);
+		ring.position.set(...cfg.position);
+		ring.lookAt(new THREE.Vector3(...cfg.target));
+
+		const label = makeLabelSprite(cfg.id, color);
+		label.position.set(cfg.position[0], cfg.position[1] + 0.4, cfg.position[2]);
+		group.add(label);
+
+		group.add(cone, fovCone, ring);
+		scene.add(group);
+		camNodes.set(cfg.id, { cone, ring });
+	}
+
+	onMount(() => {
+		scene = new THREE.Scene();
+		scene.background = null;
+
+		const width = container.clientWidth || 640;
+		const height = container.clientHeight || 480;
+		camera = new THREE.PerspectiveCamera(48, width / height, 0.1, 100);
+		camera.position.set(9, 11, 15);
+
+		renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+		renderer.setSize(width, height);
+		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+		container.appendChild(renderer.domElement);
+
+		controls = new OrbitControls(camera, renderer.domElement);
+		controls.enableDamping = true;
+		controls.dampingFactor = 0.08;
+		controls.minDistance = 4;
+		controls.maxDistance = 34;
+		controls.maxPolarAngle = Math.PI / 2.05;
+		controls.target.set(6, 0.5, 3);
+		controls.update();
+
+		scene.add(new THREE.AmbientLight(0x9fb4cc, 0.55));
+		const dir1 = new THREE.DirectionalLight(0xffffff, 0.7);
+		dir1.position.set(8, 14, 6);
+		scene.add(dir1);
+		const dir2 = new THREE.DirectionalLight(0x3fa9f5, 0.25);
+		dir2.position.set(-6, 8, -4);
+		scene.add(dir2);
+
+		rooms.forEach(buildRoom);
+		if (qrScanner) buildQrScanner(qrScanner);
+		cameraLayout.forEach(buildCamera);
+
+		const raycaster = new THREE.Raycaster();
+		const pointer = new THREE.Vector2();
+		function onClick(e: MouseEvent) {
+			const rect = renderer.domElement.getBoundingClientRect();
+			pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+			pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+			raycaster.setFromCamera(pointer, camera);
+			const hits = raycaster.intersectObjects(
+				[...camNodes.values()].map((n) => n.cone),
+				false
+			);
+			if (hits.length) {
+				selectedCameraId = hits[0].object.userData.cameraId;
+			}
+		}
+		renderer.domElement.addEventListener('click', onClick);
+
+		let t = 0;
+		function animate() {
+			frameId = requestAnimationFrame(animate);
+			t += 0.02;
+			camNodes.forEach(({ ring }) => {
+				ring.scale.setScalar(1 + Math.sin(t * 2) * 0.06);
+			});
+			controls.update();
+			renderer.render(scene, camera);
+		}
+		animate();
+
+		resizeObserver = new ResizeObserver(() => {
+			if (!container) return;
+			const w = container.clientWidth;
+			const h = container.clientHeight;
+			camera.aspect = w / h;
+			camera.updateProjectionMatrix();
+			renderer.setSize(w, h);
+		});
+		resizeObserver.observe(container);
+
+		return () => {
+			renderer.domElement.removeEventListener('click', onClick);
+		};
+	});
+
+	// Keep floor colors in sync with live occupancy state (data-driven, no scene rebuild)
+	$effect(() => {
+		for (const [zoneId, mat] of floorMats.entries()) {
+			const status = zoneStatus[zoneId]?.status ?? 'clear';
+			mat.color.setHex(STATUS_COLOR[status]);
+			mat.opacity = status === 'clear' ? 0.12 : 0.26;
+		}
+	});
+
+	onDestroy(() => {
+		if (frameId) cancelAnimationFrame(frameId);
+		resizeObserver?.disconnect();
+		controls?.dispose();
+		renderer?.dispose();
+	});
+</script>
+
+<div bind:this={container} class="h-full w-full cursor-grab active:cursor-grabbing"></div>
