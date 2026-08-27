@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { inArray } from 'drizzle-orm';
 import { db, pool } from './index.js';
 import {
+	roles,
 	systemUsers,
 	guards,
 	zones,
@@ -22,6 +23,17 @@ async function seed() {
 	console.log('Seeding database...');
 
 	// -------------------------------------------------------------------
+	// Roles — a real lookup table, referenced by system_users.role (FK)
+	// -------------------------------------------------------------------
+
+	await db.insert(roles).values([
+		{ id: 'admin', label: 'Administrator', description: 'Full system access — configuration, RBAC, all modules.' },
+		{ id: 'duty_officer', label: 'Duty Officer', description: 'Monitors live view, acknowledges alerts, approves overrides.' },
+		{ id: 'armorer', label: 'Armorer', description: 'Manages firearm inventory and maintenance records.' },
+		{ id: 'auditor', label: 'Auditor', description: 'Read-only access to audit trail and reporting exports.' }
+	]);
+
+	// -------------------------------------------------------------------
 	// Zones, rooms, doors, QR scanner, cameras — the physical layout
 	// -------------------------------------------------------------------
 
@@ -32,21 +44,21 @@ async function seed() {
 	]);
 
 	await db.insert(rooms).values([
-		{ id: 'room-zone-b', zoneId: 'zone-b', label: 'Big Room — Zone B', width: 12, depth: 6, originX: 0, originZ: 0, height: 3, wallsBuilt: ['north', 'south', 'east', 'west'] },
-		{ id: 'room-zone-c', zoneId: 'zone-c', label: 'Small Room — Armory (Zone C)', width: 5.5, depth: 2.7, originX: 6.5, originZ: 0, height: 3, wallsBuilt: ['west', 'south'] }
+		{ id: 'zone-b', label: 'Big Room — Zone B', width: 12, depth: 6, originX: 0, originZ: 0, height: 3, wallsBuilt: ['north', 'south', 'east', 'west'] },
+		{ id: 'zone-c', label: 'Small Room — Armory (Zone C)', width: 5.5, depth: 2.7, originX: 6.5, originZ: 0, height: 3, wallsBuilt: ['west', 'south'] }
 	]);
 
 	await db.insert(rackWallConfigs).values([
-		{ id: 'rack-zone-c-north', roomId: 'room-zone-c', wall: 'north', count: 8 },
-		{ id: 'rack-zone-c-west', roomId: 'room-zone-c', wall: 'west', count: 4 }
+		{ id: 'rack-zone-c-north', roomId: 'zone-c', wall: 'north', count: 8 },
+		{ id: 'rack-zone-c-west', roomId: 'zone-c', wall: 'west', count: 4 }
 	]);
 
 	await db.insert(doors).values([
-		{ id: 'DOOR-01', label: 'Door 1 — QR Gate', roomId: 'room-zone-b', wall: 'west', t: 0.78, width: 1.2, gate: 'qr', connectsTo: 'outside' },
-		{ id: 'DOOR-02', label: 'Door 2 — Facial Checkpoint', roomId: 'room-zone-c', wall: 'south', t: 0.31, width: 1.2, gate: 'facial', connectsTo: 'zone-b' }
+		{ id: 'DOOR-01', label: 'Door 1 — QR Gate', roomId: 'zone-b', wall: 'west', t: 0.78, width: 1.2, gate: 'qr', connectsToZoneId: null },
+		{ id: 'DOOR-02', label: 'Door 2 — Facial Checkpoint', roomId: 'zone-c', wall: 'south', t: 0.31, width: 1.2, gate: 'facial', connectsToZoneId: 'zone-b' }
 	]);
 
-	await db.insert(qrScanners).values([{ id: 'RD-01', label: 'QR Scanner', doorId: 'DOOR-01', posX: -0.7, posY: 1.2, posZ: 4.68 }]);
+	await db.insert(qrScanners).values([{ id: 'DOOR-01', label: 'QR Scanner', posX: -0.7, posY: 1.2, posZ: 4.68 }]);
 
 	await db.insert(cameras).values([
 		{ id: 'CAM-01', label: 'Camera 1 — Door 1 / QR Gate', zoneId: 'zone-b', posX: 0.55, posY: 2.6, posZ: 4.55, targetX: 5.5, targetY: 0, targetZ: 2.6, fovDeg: 75, status: 'online' },
@@ -58,11 +70,11 @@ async function seed() {
 	// -------------------------------------------------------------------
 
 	await db.insert(systemUsers).values([
-		{ id: 'U-001', name: 'Maj. Ramli Ahmad', email: 'ramli.ahmad@mda.gov.my', role: 'admin', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:40:00+08:00') },
-		{ id: 'U-002', name: 'Capt. Siti Rahmah', email: 'siti.rahmah@mda.gov.my', role: 'duty_officer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:55:00+08:00') },
-		{ id: 'U-003', name: 'W/O Zainal Abidin', email: 'zainal.abidin@mda.gov.my', role: 'armorer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-25T17:20:00+08:00') },
-		{ id: 'U-004', name: 'Sgt Halim Mokhtar', email: 'halim.mokhtar@mda.gov.my', role: 'armorer', mfaEnabled: false, status: 'active', lastLogin: new Date('2026-08-24T13:05:00+08:00') },
-		{ id: 'U-005', name: 'Puan Aisyah Nordin', email: 'aisyah.nordin@mda.gov.my', role: 'auditor', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-20T09:00:00+08:00') }
+		{ id: 'U-001', name: 'Mitrran Menon', email: 'mitrran@cre8iot.my', role: 'admin', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:40:00+08:00') },
+		{ id: 'U-002', name: 'Jeevasulogan', email: 'jeevasulogan@cre8iot.my', role: 'duty_officer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:55:00+08:00') },
+		{ id: 'U-003', name: 'Sasitheran', email: 'sasitheran@cre8iot.my', role: 'armorer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-25T17:20:00+08:00') },
+		{ id: 'U-004', name: 'Pathma', email: 'pathma@cre8iot.my', role: 'admin', mfaEnabled: false, status: 'active', lastLogin: new Date('2026-08-24T13:05:00+08:00') },
+		{ id: 'U-005', name: 'Test', email: 'test@cre8iot.my', role: 'auditor', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-20T09:00:00+08:00') }
 	]);
 
 	// -------------------------------------------------------------------
@@ -70,12 +82,12 @@ async function seed() {
 	// -------------------------------------------------------------------
 
 	await db.insert(guards).values([
-		{ id: 'G-1042', name: 'Aiman Hakim Rosli', rank: 'Cpl', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'AH', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T05:58:00+08:00'), currentZoneId: 'zone-c' },
-		{ id: 'G-1087', name: 'Nur Izzati Zulkifli', rank: 'Sgt', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'NZ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T06:02:00+08:00'), currentZoneId: 'zone-b' },
-		{ id: 'G-1103', name: 'Farid Danial Osman', rank: 'Pte', unit: '2nd Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'FD', biometricEnrolled: true, tokenIssued: true, shift: '1400–2200', lastSeen: new Date('2026-08-25T21:40:00+08:00'), currentZoneId: null },
-		{ id: 'G-1119', name: 'Suresh Kumar A/L Ganesan', rank: 'Cpl', unit: '1st Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'SK', biometricEnrolled: true, tokenIssued: true, shift: '2200–0600', lastSeen: new Date('2026-08-25T22:05:00+08:00'), currentZoneId: null },
-		{ id: 'G-1155', name: 'Wong Jun Wei', rank: 'Pte', unit: '1st Guard Company', clearance: 'level_1', status: 'off_duty', photoInitials: 'WJ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-24T14:10:00+08:00'), currentZoneId: null },
-		{ id: 'G-1176', name: 'Nurul Ain Yusof', rank: 'Sgt', unit: '3rd Guard Company', clearance: 'level_3', status: 'suspended', photoInitials: 'NA', biometricEnrolled: false, tokenIssued: false, shift: 'Unassigned', lastSeen: new Date('2026-08-18T09:12:00+08:00'), currentZoneId: null }
+		{ id: 'G-1042', name: 'Matt Armstrong', rank: 'Cpl', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'AH', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T05:58:00+08:00'), currentZoneId: 'zone-c' },
+		{ id: 'G-1087', name: 'Ronaldo', rank: 'Sgt', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'NZ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T06:02:00+08:00'), currentZoneId: 'zone-b' },
+		{ id: 'G-1103', name: 'Messi', rank: 'Pte', unit: '2nd Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'FD', biometricEnrolled: true, tokenIssued: true, shift: '1400–2200', lastSeen: new Date('2026-08-25T21:40:00+08:00'), currentZoneId: null },
+		{ id: 'G-1119', name: 'D.Johnson', rank: 'Cpl', unit: '1st Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'SK', biometricEnrolled: true, tokenIssued: true, shift: '2200–0600', lastSeen: new Date('2026-08-25T22:05:00+08:00'), currentZoneId: null },
+		{ id: 'G-1155', name: 'Tony Stark', rank: 'Pte', unit: '1st Guard Company', clearance: 'level_1', status: 'off_duty', photoInitials: 'WJ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-24T14:10:00+08:00'), currentZoneId: null },
+		{ id: 'G-1176', name: 'Vijay', rank: 'Sgt', unit: '3rd Guard Company', clearance: 'level_3', status: 'suspended', photoInitials: 'NA', biometricEnrolled: false, tokenIssued: false, shift: 'Unassigned', lastSeen: new Date('2026-08-18T09:12:00+08:00'), currentZoneId: null }
 	]);
 
 	// Open zone sessions matching the two guards shown "currently inside" on the frontend
@@ -219,14 +231,7 @@ async function seed() {
 	}
 
 	console.log('Seed complete.');
-	console.log('');
-	console.log('Sign in as any seeded system user, e.g.:');
-	console.log('  email: ramli.ahmad@mda.gov.my   role: admin');
-	console.log('  email: siti.rahmah@mda.gov.my   role: duty_officer');
-	console.log('  email: zainal.abidin@mda.gov.my role: armorer');
-	console.log('  email: aisyah.nordin@mda.gov.my role: auditor');
-	console.log(`  OTP: ${process.env.DEV_OTP_CODE ?? '123456'} (dev default)`);
-	console.log('');
+
 	console.log('Access requests seeded: AR-0001..AR-0003 approved, AR-0004/AR-0005 pending —');
 	console.log('try POST /api/access-requests/AR-0004/approve as admin to see it unlock a checkout.');
 }

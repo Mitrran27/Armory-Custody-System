@@ -2,37 +2,27 @@
 	import { onMount } from 'svelte';
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import { usersApi } from '$lib/api/resources';
+	import { usersApi, rolesApi } from '$lib/api/resources';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { ApiError } from '$lib/api/client';
 	import { Plus, ShieldCheck, ShieldAlert, Loader2, Ban } from 'lucide-svelte';
 	import type { SystemUser, SystemRole } from '$lib/types';
 
 	let users = $state<SystemUser[]>([]);
+	let roleList = $state<{ id: SystemRole; label: string; description: string }[]>([]);
 	let loading = $state(true);
 	let errorMsg = $state<string | null>(null);
 	let showCreate = $state(false);
 	let busy = $state(false);
 	let form = $state({ name: '', email: '', role: 'duty_officer' as SystemRole });
 
-	const roleLabel: Record<SystemRole, string> = {
-		admin: 'Administrator',
-		duty_officer: 'Duty Officer',
-		armorer: 'Armorer',
-		auditor: 'Auditor'
-	};
-	const roleDescription: Record<SystemRole, string> = {
-		admin: 'Full system access — configuration, RBAC, all modules.',
-		duty_officer: 'Monitors live view, acknowledges alerts, approves overrides.',
-		armorer: 'Manages firearm inventory and maintenance records.',
-		auditor: 'Read-only access to audit trail and reporting exports.'
-	};
+	const roleLabel = $derived(Object.fromEntries(roleList.map((r) => [r.id, r.label])) as Record<SystemRole, string>);
 
 	async function load() {
 		loading = true;
 		errorMsg = null;
 		try {
-			users = await usersApi.list();
+			[users, roleList] = await Promise.all([usersApi.list(), rolesApi.list()]);
 		} catch (err) {
 			errorMsg = err instanceof ApiError ? err.message : 'Failed to load system users.';
 		} finally {
@@ -99,7 +89,7 @@
 					<input required bind:value={form.name} placeholder="Full name" class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none" />
 					<input required type="email" bind:value={form.email} placeholder="Work email" class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none" />
 					<select bind:value={form.role} class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink-dim focus:border-accent/60 focus:outline-none">
-						{#each Object.entries(roleLabel) as [val, label] (val)}<option value={val}>{label}</option>{/each}
+						{#each roleList as r (r.id)}<option value={r.id}>{r.label}</option>{/each}
 					</select>
 					<div class="flex gap-2 sm:col-span-3">
 						<button type="submit" disabled={busy} class="flex items-center gap-1.5 rounded-sm border border-accent/40 bg-accent-dim px-3 py-2 text-[12px] font-medium text-accent disabled:opacity-50">
@@ -112,10 +102,10 @@
 		{/if}
 
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-4">
-			{#each Object.entries(roleLabel) as [role, label] (role)}
+			{#each roleList as r (r.id)}
 				<div class="rounded-sm border border-line bg-panel p-4">
-					<p class="eyebrow">{label}</p>
-					<p class="mt-1 text-[12px] text-ink-dim">{roleDescription[role as SystemRole]}</p>
+					<p class="eyebrow">{r.label}</p>
+					<p class="mt-1 text-[12px] text-ink-dim">{r.description}</p>
 				</div>
 			{/each}
 		</div>

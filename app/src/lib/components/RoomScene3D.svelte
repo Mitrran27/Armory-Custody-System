@@ -10,7 +10,9 @@
 		qrScanner,
 		cameraLayout,
 		zoneStatus,
-		selectedCameraId = $bindable(null)
+		selectedCameraId = $bindable(null),
+		focusedZoneId = $bindable(null),
+		focusScreenPos = $bindable(null)
 	}: {
 		rooms: RoomConfig[];
 		doors: DoorConfig[];
@@ -18,6 +20,10 @@
 		cameraLayout: CameraConfig[];
 		zoneStatus: Record<ZoneId, { status: ZoneStatus }>;
 		selectedCameraId?: string | null;
+		/** The zone the camera has flown in to focus on, or null when showing the full overview. */
+		focusedZoneId?: ZoneId | null;
+		/** Live screen-space anchor (px, relative to this component) for the focused room's "view layout" button, or null while not focused / off-screen. */
+		focusScreenPos?: { x: number; y: number } | null;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -30,14 +36,18 @@
 
 	const floorMats = new Map<ZoneId, THREE.MeshStandardMaterial>();
 	const camNodes = new Map<string, { cone: THREE.Mesh; ring: THREE.Mesh }>();
+	const floorMeshes = new Map<ZoneId, THREE.Mesh>();
+	const roomCenters = new Map<ZoneId, THREE.Vector3>();
+	const roomsById = new Map<ZoneId, RoomConfig>();
+	const allLabels: THREE.Sprite[] = [];
 
 	const STATUS_COLOR: Record<ZoneStatus, number> = {
-		clear: 0x34c77b,
-		occupied: 0xe8a33d,
-		alert: 0xe5484d
+		clear: 0x2ee88f,
+		occupied: 0xffb020,
+		alert: 0xff4d5e
 	};
 
-	const WALL_COLOR = 0x3fa9f5;
+	const WALL_COLOR = 0x4db2ff;
 	const WALL_THICKNESS = 0.15;
 
 	/** Returns the wall's endpoints [start, end] as [x, z] pairs, going clockwise. */
@@ -161,6 +171,7 @@
 	function buildRoom(cfg: RoomConfig) {
 		const [w, d] = cfg.size;
 		const [ox, oz] = cfg.origin;
+		roomsById.set(cfg.id, cfg);
 
 		const floorMat = new THREE.MeshStandardMaterial({
 			color: STATUS_COLOR[zoneStatus[cfg.id]?.status ?? 'clear'],
@@ -172,7 +183,10 @@
 		const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorMat);
 		floor.rotation.x = -Math.PI / 2;
 		floor.position.set(ox + w / 2, 0, oz + d / 2);
+		floor.userData = { zoneId: cfg.id };
 		scene.add(floor);
+		floorMeshes.set(cfg.id, floor);
+		roomCenters.set(cfg.id, new THREE.Vector3(ox + w / 2, 0.9, oz + d / 2));
 
 		const grid = new THREE.GridHelper(Math.max(w, d) * 1.4, Math.round(Math.max(w, d) * 2), 0x2a3441, 0x1d2632);
 		grid.position.set(ox + w / 2, 0.01, oz + d / 2);
@@ -212,6 +226,7 @@
 		const sprite = new THREE.Sprite(mat);
 		const aspect = canvas.width / canvas.height;
 		sprite.scale.set(1.7 * aspect * 0.32, 1.7 * 0.32, 1);
+		allLabels.push(sprite);
 		return sprite;
 	}
 
@@ -301,6 +316,43 @@
 		if (qrScanner) buildQrScanner(qrScanner);
 		cameraLayout.forEach(buildCamera);
 
+		const DEFAULT_CAM_POS = new THREE.Vector3(9, 11, 15);
+		const DEFAULT_TARGET = new THREE.Vector3(6, 0.5, 3);
+
+		// Camera fly-to animation state
+		let flying = false;
+		let flyFrom = { pos: new THREE.Vector3(), target: new THREE.Vector3() };
+		let flyTo = { pos: new THREE.Vector3(), target: new THREE.Vector3() };
+		let flyStart = 0;
+		const FLY_MS = 750;
+		function easeInOutCubic(x: number) {
+			return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+		}
+		function flyCameraTo(pos: THREE.Vector3, target: THREE.Vector3) {
+			flyFrom = { pos: camera.position.clone(), target: controls.target.clone() };
+			flyTo = { pos: pos.clone(), target: target.clone() };
+			flyStart = performance.now();
+			flying = true;
+			controls.enabled = false;
+		}
+
+		function focusRoom(zoneId: ZoneId) {
+			const cfg = roomsById.get(zoneId);
+			const center = roomCenters.get(zoneId);
+			if (!cfg || !center) return;
+			const [w, d] = cfg.size;
+			const span = Math.max(w, d);
+			const camPos = new THREE.Vector3(center.x + span * 0.55, span * 0.62 + 1.5, center.z + span * 0.75);
+			flyCameraTo(camPos, center);
+			focusedZoneId = zoneId;
+		}
+
+		function unfocus() {
+			flyCameraTo(DEFAULT_CAM_POS, DEFAULT_TARGET);
+			focusedZoneId = null;
+			focusScreenPos = null;
+		}
+
 		const raycaster = new THREE.Raycaster();
 		const pointer = new THREE.Vector2();
 		function onClick(e: MouseEvent) {
@@ -308,15 +360,45 @@
 			pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
 			pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 			raycaster.setFromCamera(pointer, camera);
-			const hits = raycaster.intersectObjects(
+
+			const camHits = raycaster.intersectObjects(
 				[...camNodes.values()].map((n) => n.cone),
 				false
 			);
-			if (hits.length) {
-				selectedCameraId = hits[0].object.userData.cameraId;
+			if (camHits.length) {
+				selectedCameraId = camHits[0].object.userData.cameraId;
+				return;
 			}
+
+			const floorHits = raycaster.intersectObjects([...floorMeshes.values()], false);
+			if (floorHits.length) {
+				const zoneId = floorHits[0].object.userData.zoneId as ZoneId;
+				if (focusedZoneId === zoneId) return; // already focused, no-op
+				focusRoom(zoneId);
+				return;
+			}
+
+			// Clicked empty space — return to the overview.
+			if (focusedZoneId) unfocus();
 		}
 		renderer.domElement.addEventListener('click', onClick);
+
+		const projected = new THREE.Vector3();
+		function updateFocusAnchor() {
+			if (!focusedZoneId || flying) return;
+			const center = roomCenters.get(focusedZoneId);
+			if (!center) return;
+			projected.copy(center).project(camera);
+			if (projected.z > 1) {
+				focusScreenPos = null;
+				return;
+			}
+			const rect = renderer.domElement.getBoundingClientRect();
+			focusScreenPos = {
+				x: ((projected.x + 1) / 2) * rect.width,
+				y: ((1 - projected.y) / 2) * rect.height
+			};
+		}
 
 		let t = 0;
 		function animate() {
@@ -325,7 +407,21 @@
 			camNodes.forEach(({ ring }) => {
 				ring.scale.setScalar(1 + Math.sin(t * 2) * 0.06);
 			});
+
+			if (flying) {
+				const elapsed = performance.now() - flyStart;
+				const progress = Math.min(1, elapsed / FLY_MS);
+				const eased = easeInOutCubic(progress);
+				camera.position.lerpVectors(flyFrom.pos, flyTo.pos, eased);
+				controls.target.lerpVectors(flyFrom.target, flyTo.target, eased);
+				if (progress >= 1) {
+					flying = false;
+					controls.enabled = true;
+				}
+			}
+
 			controls.update();
+			updateFocusAnchor();
 			renderer.render(scene, camera);
 		}
 		animate();
@@ -350,7 +446,18 @@
 		for (const [zoneId, mat] of floorMats.entries()) {
 			const status = zoneStatus[zoneId]?.status ?? 'clear';
 			mat.color.setHex(STATUS_COLOR[status]);
-			mat.opacity = status === 'clear' ? 0.12 : 0.26;
+			mat.opacity = status === 'clear' ? 0.16 : 0.34;
+		}
+	});
+
+	// Label sprites use a fixed world-space scale, so up close (when a room is
+	// focused) they'd otherwise blow up to cover the screen. Hiding them while
+	// focused keeps the zoomed-in view legible; the room/door context is
+	// already shown in the side panel at that point anyway.
+	$effect(() => {
+		const hide = !!focusedZoneId;
+		for (const label of allLabels) {
+			label.visible = !hide;
 		}
 	});
 

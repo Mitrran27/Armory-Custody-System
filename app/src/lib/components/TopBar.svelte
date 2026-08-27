@@ -2,8 +2,9 @@
 	import { goto } from '$app/navigation';
 	import { live } from '$lib/stores/live.svelte';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { theme } from '$lib/stores/theme.svelte';
 	import StatusPill from './StatusPill.svelte';
-	import { Wifi, WifiOff, LogOut } from 'lucide-svelte';
+	import { Wifi, WifiOff, LogOut, Sun, Moon } from 'lucide-svelte';
 	import type { ZoneId } from '$lib/types';
 
 	const zoneOrder: { id: ZoneId; short: string }[] = [
@@ -66,6 +67,13 @@
 			<p class="data-value text-[13px] text-ink">{clock}</p>
 			<p class="text-[10px] text-ink-dim">{dateStr}</p>
 		</div>
+		<button
+			onclick={() => theme.toggle()}
+			class="flex h-8 w-8 items-center justify-center rounded-sm border border-line bg-panel-raised text-ink-dim transition-colors hover:border-accent/50 hover:text-accent"
+			title={theme.current === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+		>
+			{#if theme.current === 'dark'}<Sun size={15} />{:else}<Moon size={15} />{/if}
+		</button>
 		<div class="flex items-center gap-2">
 			<div class="text-right leading-tight">
 				<p class="text-[12px] text-ink">{auth.user?.name ?? ''}</p>

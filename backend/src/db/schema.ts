@@ -15,7 +15,6 @@ import { relations } from 'drizzle-orm';
 // Enums — mirror the union types in the frontend's src/lib/types.ts
 // ---------------------------------------------------------------------------
 
-export const systemRoleEnum = pgEnum('system_role', ['admin', 'duty_officer', 'armorer', 'auditor']);
 export const systemUserStatusEnum = pgEnum('system_user_status', ['active', 'disabled']);
 export const clearanceLevelEnum = pgEnum('clearance_level', ['level_1', 'level_2', 'level_3']);
 export const guardStatusEnum = pgEnum('guard_status', ['active', 'suspended', 'off_duty']);
@@ -48,6 +47,17 @@ export const accessRequestStatusEnum = pgEnum('access_request_status', ['pending
 export const maintenanceStatusEnum = pgEnum('maintenance_status', ['assigned', 'in_progress', 'completed']);
 
 // ---------------------------------------------------------------------------
+// Roles — a real lookup table instead of a bare Postgres enum, so a role is
+// a first-class, queryable/extendable row rather than a hardcoded label.
+// ---------------------------------------------------------------------------
+
+export const roles = pgTable('roles', {
+	id: text('id').primaryKey(), // 'admin' | 'duty_officer' | 'armorer' | 'auditor' — stable natural key
+	label: text('label').notNull(),
+	description: text('description').notNull()
+});
+
+// ---------------------------------------------------------------------------
 // Back-office accounts (System Users page) — passwordless/OTP login, RBAC
 // ---------------------------------------------------------------------------
 
@@ -57,7 +67,12 @@ export const systemUsers = pgTable(
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
 		email: text('email').notNull(),
-		role: systemRoleEnum('role').notNull(),
+		// JS-facing field is `role` for compatibility with the rest of the app
+		// (JWT claims, RBAC middleware, etc.), but the actual DB column is a
+		// proper FK to roles.id, not a bare enum value.
+		role: text('role_id')
+			.notNull()
+			.references(() => roles.id),
 		status: systemUserStatusEnum('status').notNull().default('active'),
 		mfaEnabled: boolean('mfa_enabled').notNull().default(false),
 		lastLogin: timestamp('last_login', { withTimezone: true }),
@@ -146,26 +161,24 @@ export const zoneSessions = pgTable(
 	(t) => [index('zone_sessions_zone_exit_idx').on(t.zoneId, t.exitedAt), index('zone_sessions_guard_exit_idx').on(t.guardId, t.exitedAt)]
 );
 
-export const rooms = pgTable(
-	'rooms',
-	{
-		id: text('id').primaryKey(), // matches zones.id
-		zoneId: text('zone_id')
-			.notNull()
-			.references(() => zones.id),
-		label: text('label').notNull(),
-		width: doublePrecision('width').notNull(),
-		depth: doublePrecision('depth').notNull(),
-		originX: doublePrecision('origin_x').notNull(),
-		originZ: doublePrecision('origin_z').notNull(),
-		height: doublePrecision('height').notNull(),
-		wallsBuilt: rackWallEnum('walls_built').array().notNull().default([]),
-		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-		deletedAt: timestamp('deleted_at', { withTimezone: true })
-	},
-	(t) => [uniqueIndex('rooms_zone_id_idx').on(t.zoneId)]
-);
+export const rooms = pgTable('rooms', {
+	// Shared primary key: a Room only ever exists because a Zone has one, so
+	// its id IS the zone's id rather than a separate synthetic key plus a
+	// unique FK column pointing back at it.
+	id: text('id')
+		.primaryKey()
+		.references(() => zones.id),
+	label: text('label').notNull(),
+	width: doublePrecision('width').notNull(),
+	depth: doublePrecision('depth').notNull(),
+	originX: doublePrecision('origin_x').notNull(),
+	originZ: doublePrecision('origin_z').notNull(),
+	height: doublePrecision('height').notNull(),
+	wallsBuilt: rackWallEnum('walls_built').array().notNull().default([]),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+	deletedAt: timestamp('deleted_at', { withTimezone: true })
+});
 
 export const rackWallConfigs = pgTable('rack_wall_configs', {
 	id: text('id').primaryKey(),
@@ -188,7 +201,10 @@ export const doors = pgTable(
 		t: doublePrecision('t').notNull(),
 		width: doublePrecision('width').notNull(),
 		gate: doorGateEnum('gate').notNull(),
-		connectsTo: text('connects_to').notNull(), // a Zone id, or the literal 'outside'
+		// The zone this door leads to on its far side. Null means it leads
+		// outside the building envelope — a real nullable FK instead of a
+		// magic 'outside' string, so a typo'd zone id can't silently pass.
+		connectsToZoneId: text('connects_to_zone_id').references(() => zones.id),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 		deletedAt: timestamp('deleted_at', { withTimezone: true })
@@ -199,19 +215,20 @@ export const doors = pgTable(
 export const qrScanners = pgTable(
 	'qr_scanners',
 	{
-		id: text('id').primaryKey(),
-		label: text('label').notNull(),
-		doorId: text('door_id')
-			.notNull()
+		// Shared primary key: a QR scanner only ever exists because a Door has
+		// one, so its id IS the door's id rather than a separate synthetic key
+		// plus a unique FK column pointing back at it.
+		id: text('id')
+			.primaryKey()
 			.references(() => doors.id),
+		label: text('label').notNull(),
 		posX: doublePrecision('pos_x').notNull(),
 		posY: doublePrecision('pos_y').notNull(),
 		posZ: doublePrecision('pos_z').notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 		deletedAt: timestamp('deleted_at', { withTimezone: true })
-	},
-	(t) => [uniqueIndex('qr_scanners_door_id_idx').on(t.doorId)]
+	}
 );
 
 /**
@@ -382,7 +399,12 @@ export const auditEvents = pgTable(
 // Relations (used by Drizzle's relational query API — db.query.x.findMany({ with: ... }))
 // ---------------------------------------------------------------------------
 
-export const systemUsersRelations = relations(systemUsers, ({ many }) => ({
+export const rolesRelations = relations(roles, ({ many }) => ({
+	users: many(systemUsers)
+}));
+
+export const systemUsersRelations = relations(systemUsers, ({ one, many }) => ({
+	roleRef: one(roles, { fields: [systemUsers.role], references: [roles.id] }),
 	otpCodes: many(otpCodes),
 	maintenanceRecordsAssigned: many(maintenanceRecords, { relationName: 'ArmorerUser' }),
 	maintenanceRecordsAssignedBy: many(maintenanceRecords, { relationName: 'AssignedByUser' }),
@@ -407,7 +429,7 @@ export const guardsRelations = relations(guards, ({ one, many }) => ({
 export const zonesRelations = relations(zones, ({ many, one }) => ({
 	guards: many(guards),
 	cameras: many(cameras),
-	room: one(rooms, { fields: [zones.id], references: [rooms.zoneId] }),
+	room: one(rooms, { fields: [zones.id], references: [rooms.id] }),
 	zoneSessions: many(zoneSessions),
 	auditEvents: many(auditEvents),
 	accessRequests: many(accessRequests)
@@ -419,7 +441,7 @@ export const zoneSessionsRelations = relations(zoneSessions, ({ one }) => ({
 }));
 
 export const roomsRelations = relations(rooms, ({ one, many }) => ({
-	zone: one(zones, { fields: [rooms.zoneId], references: [zones.id] }),
+	zone: one(zones, { fields: [rooms.id], references: [zones.id] }),
 	racks: many(rackWallConfigs),
 	doors: many(doors)
 }));
@@ -430,7 +452,7 @@ export const rackWallConfigsRelations = relations(rackWallConfigs, ({ one }) => 
 
 export const doorsRelations = relations(doors, ({ one, many }) => ({
 	room: one(rooms, { fields: [doors.roomId], references: [rooms.id] }),
-	qrScanner: one(qrScanners, { fields: [doors.id], references: [qrScanners.doorId] }),
+	qrScanner: one(qrScanners, { fields: [doors.id], references: [qrScanners.id] }),
 	qrTokens: many(qrTokens)
 }));
 
@@ -440,7 +462,7 @@ export const qrTokensRelations = relations(qrTokens, ({ one }) => ({
 }));
 
 export const qrScannersRelations = relations(qrScanners, ({ one }) => ({
-	door: one(doors, { fields: [qrScanners.doorId], references: [doors.id] })
+	door: one(doors, { fields: [qrScanners.id], references: [doors.id] })
 }));
 
 export const camerasRelations = relations(cameras, ({ one }) => ({

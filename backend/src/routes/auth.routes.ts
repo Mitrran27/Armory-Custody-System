@@ -5,6 +5,7 @@ import { db } from '../db/index.js';
 import { systemUsers, otpCodes } from '../db/schema.js';
 import { genId } from '../utils/ids.js';
 import { signSession } from '../utils/jwt.js';
+import type { SessionClaims } from '../utils/jwt.js';
 import { asyncHandler, ApiError, pid } from '../utils/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { otpRequestLimiter, otpVerifyLimiter } from '../middleware/rateLimiters.js';
@@ -99,7 +100,7 @@ authRouter.post(
 		await db.update(otpCodes).set({ consumedAt: new Date() }).where(eq(otpCodes.id, latestOtp.id));
 		await db.update(systemUsers).set({ lastLogin: new Date() }).where(eq(systemUsers.id, user.id));
 
-		const token = signSession({ sub: user.id, email: user.email, role: user.role, name: user.name });
+		const token = signSession({ sub: user.id, email: user.email, role: user.role as SessionClaims['role'], name: user.name });
 
 		res.json({
 			token,

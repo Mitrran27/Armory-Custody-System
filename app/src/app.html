@@ -3,7 +3,18 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="color-scheme" content="dark" />
+		<meta name="color-scheme" content="dark light" />
+		<script>
+			// Applied before first paint to avoid a flash of the wrong theme.
+			(function () {
+				try {
+					var stored = localStorage.getItem('aawcs.theme');
+					var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+					document.documentElement.classList.toggle('light', theme === 'light');
+					document.documentElement.classList.toggle('dark', theme === 'dark');
+				} catch (e) {}
+			})();
+		</script>
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link

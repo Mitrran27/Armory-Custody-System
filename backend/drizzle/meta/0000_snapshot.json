@@ -1,9 +1,224 @@
 {
-  "id": "c2255065-6767-4a88-9b48-d39582afab08",
+  "id": "93b8d0a7-1827-4171-a20a-7e4702660583",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.access_requests": {
+      "name": "access_requests",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "access_request_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "guard_id": {
+          "name": "guard_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "firearm_id": {
+          "name": "firearm_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "access_request_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "requested_by_user_id": {
+          "name": "requested_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "decided_by_user_id": {
+          "name": "decided_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "access_requests_guard_idx": {
+          "name": "access_requests_guard_idx",
+          "columns": [
+            {
+              "expression": "guard_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "access_requests_status_idx": {
+          "name": "access_requests_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "access_requests_deleted_at_idx": {
+          "name": "access_requests_deleted_at_idx",
+          "columns": [
+            {
+              "expression": "deleted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "access_requests_guard_id_guards_id_fk": {
+          "name": "access_requests_guard_id_guards_id_fk",
+          "tableFrom": "access_requests",
+          "tableTo": "guards",
+          "columnsFrom": [
+            "guard_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "access_requests_zone_id_zones_id_fk": {
+          "name": "access_requests_zone_id_zones_id_fk",
+          "tableFrom": "access_requests",
+          "tableTo": "zones",
+          "columnsFrom": [
+            "zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "access_requests_firearm_id_firearms_id_fk": {
+          "name": "access_requests_firearm_id_firearms_id_fk",
+          "tableFrom": "access_requests",
+          "tableTo": "firearms",
+          "columnsFrom": [
+            "firearm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "access_requests_requested_by_user_id_system_users_id_fk": {
+          "name": "access_requests_requested_by_user_id_system_users_id_fk",
+          "tableFrom": "access_requests",
+          "tableTo": "system_users",
+          "columnsFrom": [
+            "requested_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "access_requests_decided_by_user_id_system_users_id_fk": {
+          "name": "access_requests_decided_by_user_id_system_users_id_fk",
+          "tableFrom": "access_requests",
+          "tableTo": "system_users",
+          "columnsFrom": [
+            "decided_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.audit_events": {
       "name": "audit_events",
       "schema": "",
@@ -378,11 +593,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "connects_to": {
-          "name": "connects_to",
+        "connects_to_zone_id": {
+          "name": "connects_to_zone_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -429,6 +644,19 @@
           "tableTo": "rooms",
           "columnsFrom": [
             "room_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "doors_connects_to_zone_id_zones_id_fk": {
+          "name": "doors_connects_to_zone_id_zones_id_fk",
+          "tableFrom": "doors",
+          "tableTo": "zones",
+          "columnsFrom": [
+            "connects_to_zone_id"
           ],
           "columnsTo": [
             "id"
@@ -774,6 +1002,20 @@
           "primaryKey": false,
           "notNull": false
         },
+        "assigned_by_user_id": {
+          "name": "assigned_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "maintenance_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'completed'"
+        },
         "work": {
           "name": "work",
           "type": "text",
@@ -785,6 +1027,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -859,6 +1107,19 @@
           "tableTo": "system_users",
           "columnsFrom": [
             "armorer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "maintenance_records_assigned_by_user_id_system_users_id_fk": {
+          "name": "maintenance_records_assigned_by_user_id_system_users_id_fk",
+          "tableFrom": "maintenance_records",
+          "tableTo": "system_users",
+          "columnsFrom": [
+            "assigned_by_user_id"
           ],
           "columnsTo": [
             "id"
@@ -975,12 +1236,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "door_id": {
-          "name": "door_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "pos_x": {
           "name": "pos_x",
           "type": "double precision",
@@ -1020,12 +1275,82 @@
           "notNull": false
         }
       },
+      "indexes": {},
+      "foreignKeys": {
+        "qr_scanners_id_doors_id_fk": {
+          "name": "qr_scanners_id_doors_id_fk",
+          "tableFrom": "qr_scanners",
+          "tableTo": "doors",
+          "columnsFrom": [
+            "id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.qr_tokens": {
+      "name": "qr_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guard_id": {
+          "name": "guard_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "door_id": {
+          "name": "door_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
       "indexes": {
-        "qr_scanners_door_id_idx": {
-          "name": "qr_scanners_door_id_idx",
+        "qr_tokens_code_idx": {
+          "name": "qr_tokens_code_idx",
           "columns": [
             {
-              "expression": "door_id",
+              "expression": "code",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1035,12 +1360,40 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "qr_tokens_guard_idx": {
+          "name": "qr_tokens_guard_idx",
+          "columns": [
+            {
+              "expression": "guard_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "qr_scanners_door_id_doors_id_fk": {
-          "name": "qr_scanners_door_id_doors_id_fk",
-          "tableFrom": "qr_scanners",
+        "qr_tokens_guard_id_guards_id_fk": {
+          "name": "qr_tokens_guard_id_guards_id_fk",
+          "tableFrom": "qr_tokens",
+          "tableTo": "guards",
+          "columnsFrom": [
+            "guard_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "qr_tokens_door_id_doors_id_fk": {
+          "name": "qr_tokens_door_id_doors_id_fk",
+          "tableFrom": "qr_tokens",
           "tableTo": "doors",
           "columnsFrom": [
             "door_id"
@@ -1110,8 +1463,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.rooms": {
-      "name": "rooms",
+    "public.roles": {
+      "name": "roles",
       "schema": "",
       "columns": {
         "id": {
@@ -1120,10 +1473,35 @@
           "primaryKey": true,
           "notNull": true
         },
-        "zone_id": {
-          "name": "zone_id",
+        "label": {
+          "name": "label",
           "type": "text",
           "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rooms": {
+      "name": "rooms",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
           "notNull": true
         },
         "label": {
@@ -1191,30 +1569,14 @@
           "notNull": false
         }
       },
-      "indexes": {
-        "rooms_zone_id_idx": {
-          "name": "rooms_zone_id_idx",
-          "columns": [
-            {
-              "expression": "zone_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "rooms_zone_id_zones_id_fk": {
-          "name": "rooms_zone_id_zones_id_fk",
+        "rooms_id_zones_id_fk": {
+          "name": "rooms_id_zones_id_fk",
           "tableFrom": "rooms",
           "tableTo": "zones",
           "columnsFrom": [
-            "zone_id"
+            "id"
           ],
           "columnsTo": [
             "id"
@@ -1251,10 +1613,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
-          "type": "system_role",
-          "typeSchema": "public",
+        "role_id": {
+          "name": "role_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1332,7 +1693,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "system_users_role_id_roles_id_fk": {
+          "name": "system_users_role_id_roles_id_fk",
+          "tableFrom": "system_users",
+          "tableTo": "roles",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1490,6 +1865,13 @@
           "notNull": true,
           "default": "'clear'"
         },
+        "requires_authorization": {
+          "name": "requires_authorization",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1515,6 +1897,24 @@
     }
   },
   "enums": {
+    "public.access_request_status": {
+      "name": "access_request_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "approved",
+        "rejected",
+        "revoked"
+      ]
+    },
+    "public.access_request_type": {
+      "name": "access_request_type",
+      "schema": "public",
+      "values": [
+        "zone_access",
+        "firearm_assignment"
+      ]
+    },
     "public.audit_event_type": {
       "name": "audit_event_type",
       "schema": "public",
@@ -1585,6 +1985,15 @@
         "off_duty"
       ]
     },
+    "public.maintenance_status": {
+      "name": "maintenance_status",
+      "schema": "public",
+      "values": [
+        "assigned",
+        "in_progress",
+        "completed"
+      ]
+    },
     "public.rack_wall": {
       "name": "rack_wall",
       "schema": "public",
@@ -1593,16 +2002,6 @@
         "south",
         "east",
         "west"
-      ]
-    },
-    "public.system_role": {
-      "name": "system_role",
-      "schema": "public",
-      "values": [
-        "admin",
-        "duty_officer",
-        "armorer",
-        "auditor"
       ]
     },
     "public.system_user_status": {

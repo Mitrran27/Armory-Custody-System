@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 @theme {
-	/* ---- Surfaces ---- */
+	/* ---- Surfaces (dark defaults — overridden by .light below) ---- */
 	--color-base: #0b0f14; /* canvas */
 	--color-panel: #121821; /* card / panel surface */
 	--color-panel-raised: #1a222d; /* hover / nested surface */
@@ -13,20 +13,53 @@
 	--color-ink-dim: #8b98a9; /* secondary text */
 	--color-ink-faint: #56616f; /* tertiary / disabled */
 
-	/* ---- Signal colors (semantic — reserved meanings, not decorative) ---- */
-	--color-accent: #3fa9f5; /* scan / active / focus / links */
+	/* ---- Signal colors (semantic — reserved meanings, not decorative) ----
+	   Brightened/saturated versions for dark backgrounds, where the more
+	   muted originals read as dull against near-black panels. */
+	--color-accent: #4db2ff; /* scan / active / focus / links */
 	--color-accent-dim: #1c5177;
-	--color-caution: #e8a33d; /* maintenance due / warnings */
+	--color-caution: #ffb020; /* maintenance due / warnings */
 	--color-caution-dim: #4a3517;
-	--color-clear: #34c77b; /* zone clear / success */
+	--color-clear: #2ee88f; /* zone clear / success */
 	--color-clear-dim: #16452e;
-	--color-alert: #e5484d; /* zone occupied / breach / critical */
+	--color-alert: #ff4d5e; /* zone occupied / breach / critical */
 	--color-alert-dim: #4a1b1d;
 
 	/* ---- Type ---- */
 	--font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
 	--font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+/* ---- Light theme overrides ----
+   Same token names, different values — every utility class (bg-base,
+   text-ink, border-line, ...) automatically repaints because they all
+   resolve through these CSS custom properties rather than hardcoded hex. */
+html.light {
+	--color-base: #f3f5f7;
+	--color-panel: #ffffff;
+	--color-panel-raised: #eef1f5;
+	--color-line: #d6dde4;
+	--color-line-soft: #e6eaef;
+
+	--color-ink: #161b22;
+	--color-ink-dim: #4b5563;
+	--color-ink-faint: #8a94a1;
+
+	--color-accent: #1c74c9;
+	--color-accent-dim: #d9ecfc;
+	--color-caution: #a15b06;
+	--color-caution-dim: #fbebd0;
+	--color-clear: #147a4d;
+	--color-clear-dim: #d8f3e6;
+	--color-alert: #c0262f;
+	--color-alert-dim: #fbdcde;
+
+	color-scheme: light;
+}
+
+html.dark {
+	color-scheme: dark;
 }
 
 @layer base {
@@ -36,7 +69,6 @@
 	html {
 		font-family: var(--font-body);
 		background: var(--color-base);
-		color-scheme: dark;
 	}
 	body {
 		background: var(--color-base);

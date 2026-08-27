@@ -96,6 +96,10 @@ export const firearmsApi = {
 // System Users
 // ---------------------------------------------------------------------------
 
+export const rolesApi = {
+	list: async () => apiFetch<{ id: SystemRole; label: string; description: string }[]>('/api/roles')
+};
+
 export const usersApi = {
 	list: async (opts: { includeDeleted?: boolean } = {}) =>
 		(await apiFetch<any[]>('/api/users', { query: { includeDeleted: opts.includeDeleted } })).map(mapSystemUser),

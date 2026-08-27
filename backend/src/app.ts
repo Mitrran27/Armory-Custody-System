@@ -14,6 +14,7 @@ import { camerasRouter } from './routes/cameras.routes.js';
 import { facilityRouter } from './routes/facility.routes.js';
 import { auditRouter } from './routes/audit.routes.js';
 import { accessRequestsRouter } from './routes/accessRequests.routes.js';
+import { rolesRouter } from './routes/roles.routes.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 
 const allowedOrigins = (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -42,6 +43,7 @@ app.use('/api/cameras', camerasRouter);
 app.use('/api/facility', facilityRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/access-requests', accessRequestsRouter);
+app.use('/api/roles', rolesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

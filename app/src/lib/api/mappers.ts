@@ -138,11 +138,10 @@ export function mapAccessRequest(raw: any): AccessRequest {
 }
 
 /**
- * The facility endpoint returns rooms keyed by their own synthetic id
- * ("room-zone-b") with a `zoneId` field. The frontend's 3D scene expects
- * RoomConfig.id to equal the zone id directly (that's how it correlates
- * live occupancy status to room geometry) — this is the one place that
- * distinction actually matters, so it's translated once, here.
+ * Rooms share their primary key with their zone directly (see backend
+ * schema.ts) — room.id IS the zone id, so no translation is needed here
+ * anymore. This function's job now is just flattening doors/racks/QR
+ * scanners out of the nested room query into flat arrays the 3D scene wants.
  */
 export function mapFacility(rawRooms: any[]): { rooms: RoomConfig[]; doors: DoorConfig[]; qrScanners: QrScannerConfig[] } {
 	const rooms: RoomConfig[] = [];
@@ -150,7 +149,7 @@ export function mapFacility(rawRooms: any[]): { rooms: RoomConfig[]; doors: Door
 	const qrScanners: QrScannerConfig[] = [];
 
 	for (const room of rawRooms) {
-		const zoneId = room.zoneId as ZoneId;
+		const zoneId = room.id as ZoneId;
 		rooms.push({
 			id: zoneId,
 			label: room.label,
@@ -169,7 +168,7 @@ export function mapFacility(rawRooms: any[]): { rooms: RoomConfig[]; doors: Door
 				t: door.t,
 				width: door.width,
 				gate: door.gate,
-				connectsTo: door.connectsTo
+				connectsTo: door.connectsToZoneId ?? 'outside'
 			});
 			if (door.qrScanner) {
 				qrScanners.push({

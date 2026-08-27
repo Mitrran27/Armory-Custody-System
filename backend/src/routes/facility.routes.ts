@@ -78,7 +78,7 @@ facilityRouter.post(
 				type: 'alert',
 				severity: 'warning',
 				actorName: 'Unidentified',
-				zoneId: room.zoneId,
+				zoneId: room.id,
 				detail: `QR scan rejected at ${door.label}: code does not match guard ${guardId}`
 			});
 			throw new ApiError(401, 'Invalid code for this guard/door.');
@@ -89,7 +89,7 @@ facilityRouter.post(
 				severity: 'critical',
 				actorName: 'Unidentified',
 				actorGuardId: guardId,
-				zoneId: room.zoneId,
+				zoneId: room.id,
 				detail: `QR replay attempt at ${door.label}: code already used at ${token.consumedAt.toISOString()}`
 			});
 			throw new ApiError(409, 'This code has already been used.');
@@ -100,7 +100,7 @@ facilityRouter.post(
 				severity: 'warning',
 				actorName: 'Unidentified',
 				actorGuardId: guardId,
-				zoneId: room.zoneId,
+				zoneId: room.id,
 				detail: `Expired QR code presented at ${door.label}`
 			});
 			throw new ApiError(410, 'This code has expired. Request a new one.');
@@ -108,7 +108,7 @@ facilityRouter.post(
 
 		await db.update(qrTokens).set({ consumedAt: new Date() }).where(eq(qrTokens.id, token.id));
 
-		const result = await admitGuardToZone({ guardId, zoneId: room.zoneId, method: 'qr' });
+		const result = await admitGuardToZone({ guardId, zoneId: room.id, method: 'qr' });
 		res.status(201).json(result);
 	})
 );
