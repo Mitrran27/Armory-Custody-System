@@ -1,306 +1,283 @@
 # AAWCS — Armory Access & Weapons Custody System
 
-A full-stack deliverable: a SvelteKit frontend wired to a real Express +
-PostgreSQL backend. No mock data anywhere in this version — every page
-fetches from, and writes to, the API in `backend/`. Includes light/dark
-theming and an interactive 3D monitoring view with click-to-zoom rooms and
-a rack-layout drill-down — see the changelog near the bottom for details.
+Two applications sharing one PostgreSQL database:
+
+- **`app/`** — the staff dashboard (SvelteKit) at `/`, plus a separate
+  guard-facing installable PWA at `/portal`.
+- **`backend/`** — the API (Express + Drizzle ORM) both of the above talk to.
+
+No mock data anywhere — every screen reads from and writes to the real
+database. This file covers setup and gives a tour of what exists. For the
+original design rationale and the reasoning behind specific decisions
+(why the audit trail can't be edited, why Drizzle instead of Prisma, why
+guards get a completely separate login from staff), see
+**`PROJECT_DESCRIPTION.md`** and **`backend/README.md`**.
 
 ```
 armory-system/
-├── PROJECT_DESCRIPTION.md   original system design doc
+├── PROJECT_DESCRIPTION.md   design doc + build status
 ├── backend/                 Express + Drizzle ORM + PostgreSQL API
-│   └── README.md            full API reference, roles matrix, RBAC/QR/maintenance design notes
-└── app/                     SvelteKit frontend (the operator UI)
+│   └── README.md            full API reference, roles matrix, design notes
+└── app/                     SvelteKit staff dashboard + guard PWA
 ```
-
-This README covers getting **both halves running together**. For the full
-API reference, the roles/permissions matrix, and the reasoning behind
-specific backend decisions (why the audit trail can't be edited, why Drizzle
-instead of Prisma, how the QR gate and access-request approval flow work),
-see **`backend/README.md`** — this file won't repeat all of that.
 
 ---
 
-## 1. Start PostgreSQL
+## Setup
+
+### 1. Start PostgreSQL
 
 ```bash
 cd backend
 docker compose up -d
 ```
 
-(Or point `DATABASE_URL` at any Postgres you already have — see step 2.)
+(Or point `DATABASE_URL` in `.env` at any Postgres you already have.)
 
-## 2. Configure and start the backend
+### 2. Backend
 
 ```bash
 cd backend
 cp .env.example .env          # defaults already match docker-compose.yml
 npm install                   # pure TypeScript, no native binary download
-npm run db:generate           # only needed if you edit src/db/schema.ts
-npm run db:migrate            # applies drizzle/*.sql
-npm run db:seed               # loads guards, firearms, users, audit history, room layout
+npm run db:migrate
+npm run db:seed
 npm run dev                   # http://localhost:4000
 ```
 
-Leave this running in its own terminal.
-
-### Resetting the database
-
-If you already have a database from a previous version of this project and
-pull an update that changes `backend/src/db/schema.ts`, `db:migrate` alone
-may not be enough — especially if the migration history itself was
-rebased/squashed (noted in the changelog below when that happens), in which
-case your existing database won't line up with the new migration files at
-all. When that happens, wipe and start clean:
+**If you're updating an existing database and the schema has changed**
+(check `backend/README.md`'s changelog, or just try `db:migrate` and see if
+it complains), wipe and start clean instead of trying to reconcile:
 
 ```bash
-npm run db:reset      # drops and recreates the database schema — no psql needed
+npm run db:reset      # drops and recreates the schema — no psql needed
 npm run db:migrate
 npm run db:seed
 ```
 
-`db:reset` only needs Node and the `pg` package already installed as part
-of this project, so it works the same on Windows/macOS/Linux without
-needing `psql` on your `PATH` (which a PostgreSQL installer doesn't always
-set up, particularly on Windows).
+`db:reset` only needs Node and the `pg` package already in this project, so
+it works the same on Windows/macOS/Linux without hunting for `psql` on your
+`PATH`.
 
-## 3. Configure and start the frontend
-
-In a second terminal:
+### 3. Frontend
 
 ```bash
 cd app
-cp .env.example .env          # PUBLIC_API_URL — defaults to http://localhost:4000, already correct
-npm install
+cp .env.example .env          # PUBLIC_API_URL — defaults to http://localhost:4000
+npm install                   # also pulls in the qrcode package used by both QR displays
 npm run dev                   # http://localhost:5173
 ```
 
-Open **http://localhost:5173** — you'll land on `/login`.
+> **Port matters.** The backend's default `CORS_ORIGINS` only allows
+> `localhost:5173`. Running the frontend elsewhere means updating that env
+> var and restarting the backend, or every request gets blocked by CORS.
 
-> **Port matters here.** The backend's `.env.example` sets
-> `CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"`. If you run
-> the frontend on a different port, add it to `CORS_ORIGINS` in
-> `backend/.env` and restart the backend, or the browser will block every
-> request with a CORS error.
+### 4. Sign in
 
-## 4. Sign in
+**Staff dashboard** (`http://localhost:5173`) — no passwords, email + a
+one-time code. The code is currently always **`123456`** (also printed to
+the backend's terminal on each request — see "Passwordless login" below for
+why, and what swapping in real email delivery would look like).
 
-There's no password anywhere in this system — email + a one-time code.
+| Email | Role |
+|---|---|
+| `mitrran@cre8iot.com` | admin |
+| `jeevasulogan@cre8iot.com` | duty_officer |
+| `sasitheran@cre8iot.com` | armorer |
+| `pathma@cre8iot.com` | admin |
+| `test@cre8iot.com` | auditor |
 
-1. Enter one of the seeded emails below.
-2. Enter the code — for now it's always **`123456`** (also logged to the
-   backend's terminal on each request). See `backend/README.md` → "Logging
-   in (passwordless OTP)" for why, and what swapping in real email delivery
-   later looks like.
+**Guard portal** (`http://localhost:5173/portal`) — same OTP flow, same dev
+code, but a completely separate login from the table above (see "Two
+separate front doors" below).
 
-| Email | Role | What you'll see |
+| Guard email | Name | Good for testing |
 |---|---|---|
-| `ramli.ahmad@mda.gov.my` | admin | Everything, including System Users and approving access requests |
-| `siti.rahmah@mda.gov.my` | duty_officer | Can enroll guards, file access requests, assign maintenance — not approve them |
-| `zainal.abidin@mda.gov.my` | armorer | Firearm/maintenance management, no user admin |
-| `halim.mokhtar@mda.gov.my` | armorer | Same as above — useful for testing "different armorer completes what another assigned" |
-| `aisyah.nordin@mda.gov.my` | auditor | Read-only everywhere |
-
-### The guard portal (PWA) is a separate login, at a separate URL
-
-Guards don't use the staff dashboard above at all — they have their own
-installable PWA at **`/portal`** (redirects to `/portal/login` if not
-signed in), with its own passwordless OTP login, completely separate from
-the staff session type. Any seeded guard's email works, same dev OTP:
-
-| Guard email | Name | Notable seeded state |
-|---|---|---|
-| `aiman.hakim@guard.mda.gov.my` | Cpl Aiman Hakim Rosli | Already has an approved armory access + F-0001 checked out |
-| `izzati.zulkifli@guard.mda.gov.my` | Sgt Nur Izzati Zulkifli | No prior application — good for testing the "apply" flow fresh |
-| `farid.osman@guard.mda.gov.my` | Pte Farid Danial Osman | No prior application |
-| `suresh.kumar@guard.mda.gov.my` | Cpl Suresh Kumar A/L Ganesan | Has a *pending* firearm-assignment request already on file (shows in the "Also on file" section) |
-| `wongjw@guard.mda.gov.my` | Pte Wong Jun Wei | Already has a **pending** armory access application — open this account to see the pending badge without applying yourself |
-| `ain.yusof@guard.mda.gov.my` | Sgt Nurul Ain Yusof | Account status is `suspended` — login/apply are both correctly refused |
+| `matt.armstrong@mg.com` | Cpl Matt Armstrong | Already approved for armory access, already has a firearm checked out |
+| `ronaldo@mg.com` | Sgt Ronaldo | No prior application — the "apply from scratch" flow |
+| `messi@mg.com` | Pte Messi | No prior application |
+| `d.johnson@mg.com` | Cpl D.Johnson | Has a pending *firearm-assignment* request already on file (shows in "Also on file") |
+| `tony.stark@mg.com` | Pte Tony Stark | Already has a **pending** armory-access application — open this one to see the pending badge immediately |
+| `vijay@mg.com` | Sgt Vijay | Account status is `suspended` — login and apply are both correctly refused |
 
 ---
 
-## What's actually wired (not just present in both codebases)
+## What's in the staff dashboard
 
-- **Auth**: the frontend's login page calls the real
-  `POST /api/auth/request-otp` / `verify-otp`, gets a real JWT back, and
-  attaches it as `Authorization: Bearer <token>` on every subsequent
-  request (`app/src/lib/api/client.ts`). The session is restored from
-  `localStorage` on reload and re-validated against `GET /api/auth/me`.
-- **RBAC in the UI, not just the API**: the sidebar hides "System Users"
-  from non-admins; the "Enroll guard" / "Register firearm" / "Approve"
-  buttons only render for roles the backend would actually accept the
-  request from. The backend still enforces this independently — the
-  frontend hiding a button is a UX nicety, not the security boundary.
-- **Dashboard, Guards, Firearms, System Users, Audit Trail, Access
-  Requests**: every list, filter, and detail panel reads from the API.
-  Guard suspension, firearm checkout/check-in, maintenance assignment and
-  completion, and access-request approval/rejection/revocation all make
-  real API calls and re-fetch afterward — there's no local-only state
-  pretending to be persisted.
-- **Live Monitoring (3D view)**: room/door/camera geometry comes from
-  `GET /api/facility/rooms` and `GET /api/cameras` — not a hardcoded
-  config file. Occupancy (the red/amber/green zone coloring and the
-  "Currently inside" list) polls `GET /api/zones` and `GET /api/audit`
-  every 4 seconds (`app/src/lib/stores/live.svelte.ts`).
-- **QR token issuance**: the Guards page has a real "Issue QR token"
-  button that calls `POST /api/guards/:id/qr-token` and displays the
-  actual code + expiry the backend generated.
+**Dashboard** — live stats, an access-sequence explainer, a recent-events
+feed, and current zone occupancy at a glance.
 
-## Verified, not just written
+**Live Monitoring** — a real interactive 3D model of the facility (Three.js),
+not a diagram. Click a room to fly the camera in; rooms with a rack layout
+on file (currently the armory) surface a floating "view layout" button that
+tracks the room in real screen-space as you orbit. Clicking it opens a 2D
+rack-contents panel built from actual inventory data — firearms grouped by
+their real rack, real status colors, no invented fields. Room/camera/door
+geometry and the "who's inside right now" list all come from the API, not a
+hardcoded config.
 
-Before handing this over, I ran both servers together and drove the app
-through a real headless browser — not just `npm run build` succeeding.
-Confirmed: the auth guard redirects an unauthenticated visit to `/login`;
-login actually completes and lands on the dashboard with real seeded
-counts ("of 6 total roster"); the Guards page lists all 6 seeded guards by
-name; a pending access request can be approved from the UI and the list
-updates; the Firearms detail panel shows a real maintenance log with the
-armorer's name resolved (not just an ID); and the 3D monitoring view
-renders at real pixel dimensions with live occupancy data, not a blank
-canvas.
+**Firearms** — inventory, RFID tag health, checkout/check-in (which
+requires an approved firearm-assignment request — see RBAC below), and a
+maintenance workflow with a real assign → complete lifecycle: an admin or
+duty officer assigns a repair to a specific armorer (the firearm
+automatically flips to "maintenance" status so it can't be checked out
+mid-repair), and any armorer can mark it done, which returns the firearm to
+service.
+
+**Guards** — roster management, suspend/reinstate, and a "Issue QR token"
+action that renders a real scannable QR code (not just the raw string) for
+Door 1's QR gate.
+
+**Access Requests** — the approval workflow behind two things: a guard
+being allowed to physically enter the armory, and a guard being allowed to
+check out a *specific* firearm. Staff can file an application on a guard's
+behalf; only an admin can approve, reject, or revoke one. Denied attempts
+at the door or at checkout are logged as `critical` audit alerts, not just
+silently blocked.
+
+**System Users** — admin-only account management for the four RBAC roles
+(admin, duty officer, armorer, auditor), each with a description pulled
+from a real `roles` table rather than hardcoded labels.
+
+**Audit Trail** — filterable, and genuinely append-only: every event is
+SHA-256 hash-chained to the one before it (`npm run verify-audit-chain` in
+`backend/` recomputes and checks the whole chain), and there is no edit or
+delete route for this resource at all — not even for admins. Exportable to
+a JSON file from the UI.
+
+**Notification bell** (top bar, beside the theme toggle) — polls for new
+notifications every 5 seconds and shows an unread badge. Right now this
+fires for one thing: a guard applying for armory access. Clicking a
+notification marks it read and jumps to Access Requests.
+
+**Theme toggle** — light/dark, persisted, no flash of the wrong theme on
+load. The 3D monitoring view deliberately stays dark in both themes — like
+a camera-monitor panel in professional software, a live surveillance view
+reads clearest against dark chrome regardless of the rest of the app.
+
+---
+
+## The guard portal (`/portal`) — a separate PWA, a separate login
+
+Guards don't use the staff dashboard at all. They have their own
+installable Progressive Web App:
+
+- **Real installability** — `manifest.webmanifest` (`start_url: /portal`),
+  a service worker (network-first; this app is fundamentally online, so the
+  service worker exists to make it installable and to ride out a network
+  blip, not to fake offline access to live data), and a generated icon set.
+- **A completely separate session type from staff**, even though the login
+  *flow* looks identical (email → OTP). A guard's JWT carries `type: 'guard'`
+  and no `role` field at all — there's no code path where a guard session
+  could be mistaken for, or reused as, staff credentials. Guards even have
+  their own OTP table, separate from the system users' one.
+- **Apply for armory access** — idempotent: applying while a pending or
+  approved request already exists just returns that existing one instead of
+  filing a duplicate.
+- **Live status** — pending / approved / rejected, reflecting whatever an
+  admin has decided, checked against the real database on every visit.
+- **A real QR code once approved** — rendered client-side from the same
+  one-time-token mechanism the staff-issued version uses, just scoped to
+  the guard's own account. Every time the QR view is opened, a **genuinely
+  new one-time code** is issued (the old one is invalidated) — this was
+  confirmed by capturing two separate opens over the network and diffing
+  the codes, not assumed. A live countdown shows time to expiry; after it
+  lapses, a "Get a new code" button issues another.
+
+---
+
+## RBAC that governs the physical building, not just the API
+
+Having the right *system role* decides what you can do in the dashboard.
+It's a separate, additional layer that decides whether a specific **guard**
+can walk into the armory or be handed a specific rifle — modeled as an
+application that only an `admin` can approve, exactly like the guard portal
+above describes from the guard's side.
+
+- **Zone entry**: the armory has `requiresAuthorization = true`. Before
+  admitting a guard (via the dashboard's manual entry, or the real QR-scan
+  endpoint below), the system checks for an approved `zone_access` request
+  for that exact guard. No match → 403, and the attempt is still logged as
+  a `critical` audit alert even though nothing else about it persists.
+- **Firearm checkout**: same shape — a `firearm_assignment` request must be
+  approved for that specific guard + firearm pair before checkout succeeds.
+  This is "certain guards can be issued certain firearms": assignment isn't
+  implicit from having armory access, it's its own approval.
+
+## Door 1's QR gate is real, not just described
+
+```
+POST /api/guards/:id/qr-token          (staff-issued, e.g. from the Guards page)
+POST /api/guard/qr-token                (guard's own, from the portal)
+POST /api/facility/doors/:doorId/scan   (redeems either kind)
+```
+
+A 90-second, single-use code (see `backend/.env` → `QR_TOKEN_TTL_SECONDS`).
+Issuing a new one invalidates whichever one that guard already had.
+Scanning checks it matches the guard and door, isn't expired, and hasn't
+already been used — a second scan of the same code is rejected and logged
+as a `critical` alert, since a reused code is a plausible replay attempt.
+On success, the guard is admitted into whichever zone that door's room
+belongs to via the same underlying logic the dashboard's manual entry uses,
+so a QR-gated entry and a manually-recorded one are indistinguishable in
+the audit trail apart from the `method` field.
+
+## Passwordless login, for both staff and guards
+
+No password field exists anywhere in this system. `request-otp` issues a
+code, `verify-otp` checks it and returns a session token.
+
+**About the `123456` code:** no email/SMS provider is wired up yet, so it's
+currently a fixed dev default (`DEV_OTP_CODE` in `backend/.env`), logged to
+the console instead of actually sent anywhere. Everything *around* that is
+real, though — codes are stored with a genuine expiry, are single-use, and
+are checked against the database, not hardcoded in the route handler.
+Wiring in a real provider is a one-line change in `auth.routes.ts` /
+`guardAuth.routes.ts` (swap the `console.log` for an actual send); nothing
+about the request/verify contract changes.
+
+## The database is normalized, not just functional
+
+A few things worth knowing if you're extending the schema:
+
+- `system_users.role` is a real foreign key to a `roles` table, not a bare
+  Postgres enum — `GET /api/roles` exists and the System Users page reads
+  labels from it rather than hardcoding them.
+- `rooms` and `qr_scanners` share their parent's primary key directly
+  (`rooms.id` *is* `zones.id`) rather than carrying a redundant synthetic
+  key alongside a unique foreign key back to the same parent — the right
+  shape for a genuinely one-to-one relationship.
+- `doors.connectsToZoneId` is a real nullable foreign key (null = leads
+  outside the building), not untyped text holding either a zone id or a
+  magic `'outside'` string that a typo could silently corrupt.
+
+---
 
 ## A few things worth knowing before you go further
 
-- **SSR is off app-wide** (`app/src/routes/+layout.ts`). This is a
-  JWT-in-localStorage authenticated app; there's no session available
-  during server rendering, so every route renders client-side. That's a
-  deliberate fit for an internal, always-logged-in ops tool — reconsider it
-  if you ever add a public-facing page that needs SEO.
-- **The guard/reader-device auth gap from `backend/README.md` still
-  applies.** QR token issuance and the door-scan endpoint are reachable by
-  staff roles as a stand-in for what would, in production, be the guard's
-  own device and the physical reader's own credential.
-- **Polling, not push.** The live store refreshes every 4 seconds rather
-  than using WebSockets/SSE. Fine for a demo and for most real dashboards;
-  swap `live.svelte.ts`'s `setInterval` for a socket subscription if you
-  need sub-second updates.
-
----
-
-## Changelog — database cleanup, theming, monitoring interactions
-
-### Database normalization
-
-Three real issues fixed, each confirmed with `\d` in psql against a live
-database, not just reviewed in the schema file:
-
-- **`system_users.role` is now a foreign key to a `roles` table**
-  (`system_users_role_id_roles_id_fk`), not a bare Postgres enum. The
-  actual database column is `role_id`; the JS-facing field stays `role` so
-  RBAC middleware, JWT claims, and route logic needed essentially no
-  changes. `GET /api/roles` now exists and the System Users page fetches
-  its role labels/descriptions from it instead of hardcoding them.
-- **`rooms` and `qr_scanners` now share their parent's primary key**
-  instead of carrying a redundant synthetic id plus a separate unique FK
-  back to the same parent. A Room only ever exists because a Zone has one
-  (`rooms.id` IS `zones.id`, enforced as `rooms_id_zones_id_fk`); same
-  pattern for `qr_scanners` → `doors`.
-- **`doors.connectsTo` is a real FK now**, not untyped text holding either
-  a zone id or the magic string `'outside'`. It's `connectsToZoneId`, a
-  nullable FK to `zones` — null means the door leads outside the building
-  envelope, and a typo'd zone id can no longer silently pass validation.
-
-Migration history was squashed into a fresh single init (the PK-type
-changes weren't cleanly `ALTER`-able over existing dev data, and pre-launch
-is a reasonable time to do that) and reapplied to a wiped database, then
-reseeded and reverified against `verify-audit-chain`.
-
-### Light / dark theme
-
-Toggle button in the top bar (sun/moon icon). Implemented as a second set
-of CSS custom-property values under an `html.light` selector — every
-existing utility class (`bg-panel`, `text-ink`, `border-line`, ...) already
-resolves through these variables, so no component needed to change to
-support it. Preference persists to `localStorage`, with an inline
-pre-hydration script in `app.html` so there's no flash of the wrong theme
-on load.
-
-One deliberate exception: the Live Monitoring 3D panel stays dark
-regardless of the app-wide theme — like a camera-monitor or video-editing
-preview panel, a live 3D surveillance view reads clearest against dark
-chrome either way, and it avoids re-tuning an entire Three.js material
-palette for a second theme.
-
-### Live Monitoring — larger view, brighter status colors, click-to-focus
-
-- The 3D panel is substantially larger (`78vh`, min 620px — was a fixed
-  560px) and the Clear/Occupied/Alert colors were brightened, both the 2D
-  status pills and the 3D floor tint (kept in sync so they still read as
-  the same color system).
-- **Click a room to zoom in.** The camera flies to frame that room with an
-  eased animation; click empty space (or a different room) to fly back
-  out. Room/door/camera labels — which use a fixed world-space size — are
-  hidden while zoomed in, since at that distance they'd otherwise blow up
-  to cover the screen (a real bug I caught and fixed while verifying this
-  against screenshots, not something I anticipated in advance).
-- **A "Click to view layout" button tracks the focused room** in real
-  screen-space, recomputed every animation frame via `camera.project()` —
-  it stays correctly positioned even if you keep orbiting after the
-  auto-zoom completes. It only appears for rooms that actually have a rack
-  layout on file (currently just the armory).
-- **Clicking it opens a 2D rack-contents modal** (`LayoutPanel.svelte`),
-  adapted from a warehouse-management reference screenshot but wired to
-  this system's real schema: firearms grouped by their actual `rack`
-  field, real status colors, the room's real door/gate info. I deliberately
-  didn't invent fields like "weight" or "capacity %" that don't exist in
-  this domain model just to match the reference more closely — what's
-  shown is honest to the data.
-
-**How this was verified:** clicking a room in a real browser and having it
-land in exactly the right spot depends on camera projection math that's
-easy to get subtly wrong. Rather than trust the code, I drove it with a
-headless browser and screenshotted the result: confirmed the fly-in
-animation, the floating button tracking the room correctly, the modal
-rendering real seeded firearm data grouped into the right racks, and the
-fly-back-out on deselect — all shown in actual rendered screenshots, not
-inferred from reading the code.
-
-
-### Guard portal (PWA), armory access applications, and admin notifications
-
-A whole second, separate app: guards apply for armory access and get their
-entry QR themselves, instead of everything running through staff.
-
-- **`/portal` is an installable PWA** — real `manifest.webmanifest`
-  (`start_url: /portal`), a service worker (`static/sw.js`, network-first —
-  this app is fundamentally online, so the service worker exists to make
-  the app installable and give the shell a chance to load through a network
-  blip, not to fake offline data access), and a generated icon set
-  (192/512/512-maskable/apple-touch-icon).
-- **Guards get their own login, entirely separate from staff.** Same
-  passwordless-OTP shape as the staff login, but a distinct JWT type
-  (`GuardSessionClaims` carries `type: 'guard'`, no `role` field) and a
-  separate `guard_otp_codes` table — a guard's session can never be mistaken
-  for, or reused as, staff credentials, even though both flows look
-  identical from the outside.
-- **`POST /api/guard/apply-armory`** — a guard applies for entry to the
-  armory. Deliberately idempotent: applying while a pending or approved
-  request already exists returns that existing one rather than creating a
-  duplicate (confirmed with two consecutive calls returning the same ID).
-- **Admins get a real notification, not a poll-and-hope.** A new
-  `notifications` table gets a row the moment a guard applies; the bell
-  icon in the staff TopBar (beside the theme toggle, as asked) polls every
-  5s and shows an unread badge. Clicking a notification marks it read and
-  jumps to Access Requests.
-- **The status loop is real, not simulated.** Guard applies → shows
-  "Pending" → admin approves from the existing Access Requests page → guard
-  reloads their portal → shows "Approved" with a "Show Entry QR Code"
-  button — confirmed end-to-end with a live approve call in between, not
-  hardcoded state transitions.
-- **The QR code is an actual scannable image**, rendered client-side with
-  the `qrcode` package from the real one-time token the backend issues
-  (same `POST .../qr-token` mechanism as the staff-issued version, just
-  scoped to the signed-in guard's own account). Each time a guard opens the
-  QR view, a **genuinely fresh code is issued** — confirmed by capturing
-  two separate open events over the network and diffing the codes, not
-  assumed from reading the code. A live countdown shows time to expiry;
-  after it lapses, a "Get a new code" button issues another one-time token.
-
-**How this was verified:** the same screenshot-driven process as the rest
-of this changelog — logged in as a guard with no prior application and
-watched the apply button actually produce a "Pending" badge; logged in as
-admin and watched the bell's unread count go from 0 to 1 within one poll
-cycle of that application; approved it; came back to the guard's portal and
-watched it show "Approved"; opened the QR view and confirmed a real
-scannable QR image renders with a working countdown, not a placeholder.
+- **SSR is off app-wide** (`app/src/routes/+layout.ts`). Both the staff
+  dashboard and the guard portal are JWT-in-localStorage authenticated
+  apps; there's no session available during server rendering, so every
+  route renders client-side. Deliberate for an internal, always-logged-in
+  tool — reconsider it if a public-facing page ever needs SEO.
+- **The guard/reader-device auth gap.** QR token issuance and the door-scan
+  endpoint are currently reachable by staff roles (and, for their own
+  token, by the guard themselves) as a stand-in for what would, in a real
+  deployment, be the guard's own device and the physical reader hardware's
+  own credential — neither of those has its own auth mechanism yet.
+- **Polling, not push**, everywhere live data updates (zone occupancy, the
+  audit feed, the notification bell) — a `setInterval` on a few-second
+  cycle, not WebSockets/SSE. Fine for a small back-office team; swap the
+  relevant store's polling loop for a socket subscription if you need
+  sub-second updates.
+- **Notifications are role-broadcast, not per-person.** A notification for
+  `admin` is visible to every admin, and one admin marking it read clears
+  it for all of them. Fine for a small team; if this needs per-person read
+  state later, split `read` into its own join table keyed by
+  `(notificationId, systemUserId)` rather than changing `notifications`'
+  shape.
+- **No automated test suite.** Everything described above was verified by
+  actually running the app — migrations applied against a live database,
+  screenshots of the real rendered UI, network requests captured and
+  diffed — but that's manual verification done once while building, not a
+  regression-proof test file that runs on every future change.
