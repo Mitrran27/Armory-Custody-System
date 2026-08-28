@@ -4,6 +4,7 @@
 	import { auth } from '$lib/stores/auth.svelte';
 	import { theme } from '$lib/stores/theme.svelte';
 	import StatusPill from './StatusPill.svelte';
+	import NotificationBell from './NotificationBell.svelte';
 	import { Wifi, WifiOff, LogOut, Sun, Moon } from 'lucide-svelte';
 	import type { ZoneId } from '$lib/types';
 
@@ -74,6 +75,9 @@
 		>
 			{#if theme.current === 'dark'}<Sun size={15} />{:else}<Moon size={15} />{/if}
 		</button>
+		{#if auth.hasRole('admin')}
+			<NotificationBell />
+		{/if}
 		<div class="flex items-center gap-2">
 			<div class="text-right leading-tight">
 				<p class="text-[12px] text-ink">{auth.user?.name ?? ''}</p>

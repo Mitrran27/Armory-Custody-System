@@ -5,6 +5,7 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import { live } from '$lib/stores/live.svelte';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { notifications } from '$lib/stores/notifications.svelte';
 	import { Loader2 } from 'lucide-svelte';
 
 	let { children } = $props();
@@ -22,8 +23,12 @@
 			return;
 		}
 		live.start();
+		notifications.start();
 	});
-	onDestroy(() => live.stop());
+	onDestroy(() => {
+		live.stop();
+		notifications.stop();
+	});
 
 	$effect(() => {
 		if (checked && !auth.isAuthenticated) {

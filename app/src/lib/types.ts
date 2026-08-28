@@ -164,3 +164,14 @@ export interface AccessRequest {
 	decidedAt: string | null; // ISO
 	notes: string | null;
 }
+
+export interface Notification {
+	id: string;
+	recipientRole: SystemRole;
+	type: 'access_request_submitted';
+	title: string;
+	body: string;
+	relatedAccessRequestId: string | null;
+	read: boolean;
+	createdAt: string; // ISO
+}

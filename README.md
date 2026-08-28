@@ -45,6 +45,26 @@ npm run dev                   # http://localhost:4000
 
 Leave this running in its own terminal.
 
+### Resetting the database
+
+If you already have a database from a previous version of this project and
+pull an update that changes `backend/src/db/schema.ts`, `db:migrate` alone
+may not be enough — especially if the migration history itself was
+rebased/squashed (noted in the changelog below when that happens), in which
+case your existing database won't line up with the new migration files at
+all. When that happens, wipe and start clean:
+
+```bash
+npm run db:reset      # drops and recreates the database schema — no psql needed
+npm run db:migrate
+npm run db:seed
+```
+
+`db:reset` only needs Node and the `pg` package already installed as part
+of this project, so it works the same on Windows/macOS/Linux without
+needing `psql` on your `PATH` (which a PostgreSQL installer doesn't always
+set up, particularly on Windows).
+
 ## 3. Configure and start the frontend
 
 In a second terminal:
@@ -81,6 +101,22 @@ There's no password anywhere in this system — email + a one-time code.
 | `zainal.abidin@mda.gov.my` | armorer | Firearm/maintenance management, no user admin |
 | `halim.mokhtar@mda.gov.my` | armorer | Same as above — useful for testing "different armorer completes what another assigned" |
 | `aisyah.nordin@mda.gov.my` | auditor | Read-only everywhere |
+
+### The guard portal (PWA) is a separate login, at a separate URL
+
+Guards don't use the staff dashboard above at all — they have their own
+installable PWA at **`/portal`** (redirects to `/portal/login` if not
+signed in), with its own passwordless OTP login, completely separate from
+the staff session type. Any seeded guard's email works, same dev OTP:
+
+| Guard email | Name | Notable seeded state |
+|---|---|---|
+| `aiman.hakim@guard.mda.gov.my` | Cpl Aiman Hakim Rosli | Already has an approved armory access + F-0001 checked out |
+| `izzati.zulkifli@guard.mda.gov.my` | Sgt Nur Izzati Zulkifli | No prior application — good for testing the "apply" flow fresh |
+| `farid.osman@guard.mda.gov.my` | Pte Farid Danial Osman | No prior application |
+| `suresh.kumar@guard.mda.gov.my` | Cpl Suresh Kumar A/L Ganesan | Has a *pending* firearm-assignment request already on file (shows in the "Also on file" section) |
+| `wongjw@guard.mda.gov.my` | Pte Wong Jun Wei | Already has a **pending** armory access application — open this account to see the pending badge without applying yourself |
+| `ain.yusof@guard.mda.gov.my` | Sgt Nurul Ain Yusof | Account status is `suspended` — login/apply are both correctly refused |
 
 ---
 
@@ -220,3 +256,51 @@ rendering real seeded firearm data grouped into the right racks, and the
 fly-back-out on deselect — all shown in actual rendered screenshots, not
 inferred from reading the code.
 
+
+### Guard portal (PWA), armory access applications, and admin notifications
+
+A whole second, separate app: guards apply for armory access and get their
+entry QR themselves, instead of everything running through staff.
+
+- **`/portal` is an installable PWA** — real `manifest.webmanifest`
+  (`start_url: /portal`), a service worker (`static/sw.js`, network-first —
+  this app is fundamentally online, so the service worker exists to make
+  the app installable and give the shell a chance to load through a network
+  blip, not to fake offline data access), and a generated icon set
+  (192/512/512-maskable/apple-touch-icon).
+- **Guards get their own login, entirely separate from staff.** Same
+  passwordless-OTP shape as the staff login, but a distinct JWT type
+  (`GuardSessionClaims` carries `type: 'guard'`, no `role` field) and a
+  separate `guard_otp_codes` table — a guard's session can never be mistaken
+  for, or reused as, staff credentials, even though both flows look
+  identical from the outside.
+- **`POST /api/guard/apply-armory`** — a guard applies for entry to the
+  armory. Deliberately idempotent: applying while a pending or approved
+  request already exists returns that existing one rather than creating a
+  duplicate (confirmed with two consecutive calls returning the same ID).
+- **Admins get a real notification, not a poll-and-hope.** A new
+  `notifications` table gets a row the moment a guard applies; the bell
+  icon in the staff TopBar (beside the theme toggle, as asked) polls every
+  5s and shows an unread badge. Clicking a notification marks it read and
+  jumps to Access Requests.
+- **The status loop is real, not simulated.** Guard applies → shows
+  "Pending" → admin approves from the existing Access Requests page → guard
+  reloads their portal → shows "Approved" with a "Show Entry QR Code"
+  button — confirmed end-to-end with a live approve call in between, not
+  hardcoded state transitions.
+- **The QR code is an actual scannable image**, rendered client-side with
+  the `qrcode` package from the real one-time token the backend issues
+  (same `POST .../qr-token` mechanism as the staff-issued version, just
+  scoped to the signed-in guard's own account). Each time a guard opens the
+  QR view, a **genuinely fresh code is issued** — confirmed by capturing
+  two separate open events over the network and diffing the codes, not
+  assumed from reading the code. A live countdown shows time to expiry;
+  after it lapses, a "Get a new code" button issues another one-time token.
+
+**How this was verified:** the same screenshot-driven process as the rest
+of this changelog — logged in as a guard with no prior application and
+watched the apply button actually produce a "Pending" badge; logged in as
+admin and watched the bell's unread count go from 0 to 1 within one poll
+cycle of that application; approved it; came back to the guard's portal and
+watched it show "Approved"; opened the QR view and confirmed a real
+scannable QR image renders with a working countdown, not a placeholder.

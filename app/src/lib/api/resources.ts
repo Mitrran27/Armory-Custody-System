@@ -24,6 +24,7 @@ import type {
 	Guard,
 	GuardStatus,
 	MaintenanceRecord,
+	Notification,
 	QrScannerConfig,
 	RoomConfig,
 	SystemRole,
@@ -178,4 +179,14 @@ export const accessRequestsApi = {
 	approve: async (id: string, notes?: string) => mapAccessRequest(await apiFetch<any>(`/api/access-requests/${id}/approve`, { method: 'POST', body: { notes } })),
 	reject: async (id: string, notes?: string) => mapAccessRequest(await apiFetch<any>(`/api/access-requests/${id}/reject`, { method: 'POST', body: { notes } })),
 	revoke: async (id: string, notes?: string) => mapAccessRequest(await apiFetch<any>(`/api/access-requests/${id}/revoke`, { method: 'POST', body: { notes } }))
+};
+
+// ---------------------------------------------------------------------------
+// Notifications (admin-facing)
+// ---------------------------------------------------------------------------
+
+export const notificationsApi = {
+	list: async (): Promise<Notification[]> => apiFetch<Notification[]>('/api/notifications'),
+	markRead: async (id: string) => apiFetch<Notification>(`/api/notifications/${id}/read`, { method: 'POST' }),
+	markAllRead: async () => apiFetch<{ message: string }>('/api/notifications/read-all', { method: 'POST' })
 };

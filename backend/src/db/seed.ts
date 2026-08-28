@@ -70,11 +70,11 @@ async function seed() {
 	// -------------------------------------------------------------------
 
 	await db.insert(systemUsers).values([
-		{ id: 'U-001', name: 'Mitrran Menon', email: 'mitrran@cre8iot.my', role: 'admin', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:40:00+08:00') },
-		{ id: 'U-002', name: 'Jeevasulogan', email: 'jeevasulogan@cre8iot.my', role: 'duty_officer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:55:00+08:00') },
-		{ id: 'U-003', name: 'Sasitheran', email: 'sasitheran@cre8iot.my', role: 'armorer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-25T17:20:00+08:00') },
-		{ id: 'U-004', name: 'Pathma', email: 'pathma@cre8iot.my', role: 'admin', mfaEnabled: false, status: 'active', lastLogin: new Date('2026-08-24T13:05:00+08:00') },
-		{ id: 'U-005', name: 'Test', email: 'test@cre8iot.my', role: 'auditor', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-20T09:00:00+08:00') }
+		{ id: 'U-001', name: 'Mitrran Menon', email: 'mitrran@cre8iot.com', role: 'admin', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:40:00+08:00') },
+		{ id: 'U-002', name: 'Jeevasulogan', email: 'jeevasulogan@cre8iot.com', role: 'duty_officer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:55:00+08:00') },
+		{ id: 'U-003', name: 'Sasitheran', email: 'sasitheran@cre8iot.com', role: 'armorer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-25T17:20:00+08:00') },
+		{ id: 'U-004', name: 'Pathma', email: 'pathma@cre8iot.com', role: 'admin', mfaEnabled: false, status: 'active', lastLogin: new Date('2026-08-24T13:05:00+08:00') },
+		{ id: 'U-005', name: 'Test', email: 'test@cre8iot.com', role: 'auditor', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-20T09:00:00+08:00') }
 	]);
 
 	// -------------------------------------------------------------------
@@ -82,12 +82,12 @@ async function seed() {
 	// -------------------------------------------------------------------
 
 	await db.insert(guards).values([
-		{ id: 'G-1042', name: 'Matt Armstrong', rank: 'Cpl', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'AH', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T05:58:00+08:00'), currentZoneId: 'zone-c' },
-		{ id: 'G-1087', name: 'Ronaldo', rank: 'Sgt', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'NZ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T06:02:00+08:00'), currentZoneId: 'zone-b' },
-		{ id: 'G-1103', name: 'Messi', rank: 'Pte', unit: '2nd Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'FD', biometricEnrolled: true, tokenIssued: true, shift: '1400–2200', lastSeen: new Date('2026-08-25T21:40:00+08:00'), currentZoneId: null },
-		{ id: 'G-1119', name: 'D.Johnson', rank: 'Cpl', unit: '1st Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'SK', biometricEnrolled: true, tokenIssued: true, shift: '2200–0600', lastSeen: new Date('2026-08-25T22:05:00+08:00'), currentZoneId: null },
-		{ id: 'G-1155', name: 'Tony Stark', rank: 'Pte', unit: '1st Guard Company', clearance: 'level_1', status: 'off_duty', photoInitials: 'WJ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-24T14:10:00+08:00'), currentZoneId: null },
-		{ id: 'G-1176', name: 'Vijay', rank: 'Sgt', unit: '3rd Guard Company', clearance: 'level_3', status: 'suspended', photoInitials: 'NA', biometricEnrolled: false, tokenIssued: false, shift: 'Unassigned', lastSeen: new Date('2026-08-18T09:12:00+08:00'), currentZoneId: null }
+		{ id: 'G-1042', name: 'Matt Armstrong', email: 'matt.armstrong@mg.com', rank: 'Cpl', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'AH', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T05:58:00+08:00'), currentZoneId: 'zone-c' },
+		{ id: 'G-1087', name: 'Ronaldo', email: 'ronaldo@mg.com', rank: 'Sgt', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'NZ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T06:02:00+08:00'), currentZoneId: 'zone-b' },
+		{ id: 'G-1103', name: 'Messi', email: 'messi@mg.com', rank: 'Pte', unit: '2nd Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'FD', biometricEnrolled: true, tokenIssued: true, shift: '1400–2200', lastSeen: new Date('2026-08-25T21:40:00+08:00'), currentZoneId: null },
+		{ id: 'G-1119', name: 'D.Johnson', email: 'd.johnson@mg.com', rank: 'Cpl', unit: '1st Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'SK', biometricEnrolled: true, tokenIssued: true, shift: '2200–0600', lastSeen: new Date('2026-08-25T22:05:00+08:00'), currentZoneId: null },
+		{ id: 'G-1155', name: 'Tony Stark', email: 'tony.stark@mg.com', rank: 'Pte', unit: '1st Guard Company', clearance: 'level_1', status: 'off_duty', photoInitials: 'WJ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-24T14:10:00+08:00'), currentZoneId: null },
+		{ id: 'G-1176', name: 'Vijay', email: 'vijay@mg.com', rank: 'Sgt', unit: '3rd Guard Company', clearance: 'level_3', status: 'suspended', photoInitials: 'NA', biometricEnrolled: false, tokenIssued: false, shift: 'Unassigned', lastSeen: new Date('2026-08-18T09:12:00+08:00'), currentZoneId: null }
 	]);
 
 	// Open zone sessions matching the two guards shown "currently inside" on the frontend

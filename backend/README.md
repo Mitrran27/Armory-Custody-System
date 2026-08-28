@@ -389,6 +389,7 @@ the same pattern as `cameras.routes.ts`.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:generate` | Generate a migration from `src/db/schema.ts` |
 | `npm run db:migrate` | Apply pending migrations |
+| `npm run db:reset` | Drop and recreate the database schema (both `public` and Drizzle's own `drizzle` tracking schema) — no `psql` required. Use before `db:migrate` when your existing database predates a squashed/rebased migration history. |
 | `npm run db:push` | Push schema directly without a migration file (prototyping only) |
 | `npm run db:studio` | Open Drizzle Studio to browse the database |
 | `npm run db:seed` | Load the seed dataset |

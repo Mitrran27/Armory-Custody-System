@@ -117,11 +117,34 @@ export const guards = pgTable(
 		shift: text('shift').notNull(),
 		lastSeen: timestamp('last_seen', { withTimezone: true }),
 		currentZoneId: text('current_zone_id').references(() => zones.id),
+		/** Lets a guard sign in to their own self-service portal (apply for armory access, view status, get their QR). Nullable so admin-entered roster rows don't require one up front. */
+		email: text('email'),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 		deletedAt: timestamp('deleted_at', { withTimezone: true })
 	},
-	(t) => [index('guards_deleted_at_idx').on(t.deletedAt)]
+	(t) => [index('guards_deleted_at_idx').on(t.deletedAt), uniqueIndex('guards_email_idx').on(t.email)]
+);
+
+/**
+ * Guards sign in the same passwordless-OTP way system users do, but through
+ * a completely separate table/session type — a guard's PWA session should
+ * never be mistaken for (or carry the permissions of) a back-office system
+ * user's session, even though the login *flow* looks identical.
+ */
+export const guardOtpCodes = pgTable(
+	'guard_otp_codes',
+	{
+		id: text('id').primaryKey(),
+		guardId: text('guard_id')
+			.notNull()
+			.references(() => guards.id, { onDelete: 'cascade' }),
+		code: text('code').notNull(),
+		expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+		consumedAt: timestamp('consumed_at', { withTimezone: true }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [index('guard_otp_codes_guard_code_idx').on(t.guardId, t.code)]
 );
 
 // ---------------------------------------------------------------------------
@@ -364,6 +387,33 @@ export const accessRequests = pgTable(
 	]
 );
 
+export const notificationTypeEnum = pgEnum('notification_type', ['access_request_submitted']);
+
+/**
+ * Role-broadcast, not per-user: a notification with recipientRole 'admin'
+ * is meant for any admin, and marking it read (from any admin's session)
+ * clears it for all of them. Simple and matches a small back-office team;
+ * if this ever needs per-person read state, split `read` out into its own
+ * join table keyed by (notificationId, systemUserId) rather than changing
+ * this table's shape.
+ */
+export const notifications = pgTable(
+	'notifications',
+	{
+		id: text('id').primaryKey(),
+		recipientRole: text('recipient_role')
+			.notNull()
+			.references(() => roles.id),
+		type: notificationTypeEnum('type').notNull(),
+		title: text('title').notNull(),
+		body: text('body').notNull(),
+		relatedAccessRequestId: text('related_access_request_id').references(() => accessRequests.id),
+		read: boolean('read').notNull().default(false),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [index('notifications_recipient_role_idx').on(t.recipientRole, t.read)]
+);
+
 // ---------------------------------------------------------------------------
 // Audit Trail — append-only & hash-chained on purpose (see README §Audit).
 // No deletedAt column and no update/delete route exists for this table, even
@@ -417,13 +467,18 @@ export const otpCodesRelations = relations(otpCodes, ({ one }) => ({
 	user: one(systemUsers, { fields: [otpCodes.userId], references: [systemUsers.id] })
 }));
 
+export const guardOtpCodesRelations = relations(guardOtpCodes, ({ one }) => ({
+	guard: one(guards, { fields: [guardOtpCodes.guardId], references: [guards.id] })
+}));
+
 export const guardsRelations = relations(guards, ({ one, many }) => ({
 	currentZone: one(zones, { fields: [guards.currentZoneId], references: [zones.id] }),
 	firearmsHeld: many(firearms),
 	zoneSessions: many(zoneSessions),
 	auditEventsAsActor: many(auditEvents),
 	qrTokens: many(qrTokens),
-	accessRequests: many(accessRequests)
+	accessRequests: many(accessRequests),
+	otpCodes: many(guardOtpCodes)
 }));
 
 export const zonesRelations = relations(zones, ({ many, one }) => ({
@@ -488,6 +543,11 @@ export const accessRequestsRelations = relations(accessRequests, ({ one }) => ({
 	firearm: one(firearms, { fields: [accessRequests.firearmId], references: [firearms.id] }),
 	requestedBy: one(systemUsers, { fields: [accessRequests.requestedByUserId], references: [systemUsers.id], relationName: 'RequestedByUser' }),
 	decidedBy: one(systemUsers, { fields: [accessRequests.decidedByUserId], references: [systemUsers.id], relationName: 'DecidedByUser' })
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+	relatedAccessRequest: one(accessRequests, { fields: [notifications.relatedAccessRequestId], references: [accessRequests.id] }),
+	recipientRoleRef: one(roles, { fields: [notifications.recipientRole], references: [roles.id] })
 }));
 
 export const auditEventsRelations = relations(auditEvents, ({ one }) => ({

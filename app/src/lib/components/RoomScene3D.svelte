@@ -36,7 +36,6 @@
 
 	const floorMats = new Map<ZoneId, THREE.MeshStandardMaterial>();
 	const camNodes = new Map<string, { cone: THREE.Mesh; ring: THREE.Mesh }>();
-	const floorMeshes = new Map<ZoneId, THREE.Mesh>();
 	const roomCenters = new Map<ZoneId, THREE.Vector3>();
 	const roomsById = new Map<ZoneId, RoomConfig>();
 	const allLabels: THREE.Sprite[] = [];
@@ -49,6 +48,72 @@
 
 	const WALL_COLOR = 0x4db2ff;
 	const WALL_THICKNESS = 0.15;
+
+	/**
+	 * Room hit-testing uses 2D screen-space polygons instead of 3D raycasting
+	 * against invisible geometry. That's deliberate: an invisible box tall
+	 * enough to also cover a room's floating name label can, from an angled
+	 * camera, visually cover screen space that actually belongs to a
+	 * different (farther-back) room — which is exactly what was stealing
+	 * clicks clearly aimed at a room behind another one. Projecting each
+	 * room's actual corners to the screen and testing point-in-polygon
+	 * matches what a person is visually judging when they click, and has no
+	 * such occlusion failure mode.
+	 */
+	function projectToScreen(v: THREE.Vector3, rect: DOMRect): { x: number; y: number; behind: boolean } {
+		const p = v.clone().project(camera);
+		return { x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height, behind: p.z > 1 };
+	}
+
+	function roomScreenHull(cfg: RoomConfig, rect: DOMRect): [number, number][] {
+		const [w, d] = cfg.size;
+		const [ox, oz] = cfg.origin;
+		// Floor corners plus corners just above the floating label, so the
+		// label itself is a valid click target too.
+		const ys = [0, cfg.height + 2.2];
+		const pts: [number, number][] = [];
+		for (const y of ys) {
+			for (const x of [ox, ox + w]) {
+				for (const z of [oz, oz + d]) {
+					const p = projectToScreen(new THREE.Vector3(x, y, z), rect);
+					if (!p.behind) pts.push([p.x, p.y]);
+				}
+			}
+		}
+		return convexHull2D(pts);
+	}
+
+	function convexHull2D(points: [number, number][]): [number, number][] {
+		const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+		if (pts.length < 3) return pts;
+		const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+			(a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+		const lower: [number, number][] = [];
+		for (const p of pts) {
+			while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+			lower.push(p);
+		}
+		const upper: [number, number][] = [];
+		for (let i = pts.length - 1; i >= 0; i--) {
+			const p = pts[i];
+			while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+			upper.push(p);
+		}
+		lower.pop();
+		upper.pop();
+		return lower.concat(upper);
+	}
+
+	function pointInPolygon(pt: [number, number], poly: [number, number][]): boolean {
+		let inside = false;
+		for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+			const [xi, yi] = poly[i];
+			const [xj, yj] = poly[j];
+			const intersect = yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi;
+			if (intersect) inside = !inside;
+		}
+		return inside;
+	}
 
 	/** Returns the wall's endpoints [start, end] as [x, z] pairs, going clockwise. */
 	function wallLine(room: RoomConfig, wall: RackWall): [[number, number], [number, number]] {
@@ -185,7 +250,6 @@
 		floor.position.set(ox + w / 2, 0, oz + d / 2);
 		floor.userData = { zoneId: cfg.id };
 		scene.add(floor);
-		floorMeshes.set(cfg.id, floor);
 		roomCenters.set(cfg.id, new THREE.Vector3(ox + w / 2, 0.9, oz + d / 2));
 
 		const grid = new THREE.GridHelper(Math.max(w, d) * 1.4, Math.round(Math.max(w, d) * 2), 0x2a3441, 0x1d2632);
@@ -370,9 +434,17 @@
 				return;
 			}
 
-			const floorHits = raycaster.intersectObjects([...floorMeshes.values()], false);
-			if (floorHits.length) {
-				const zoneId = floorHits[0].object.userData.zoneId as ZoneId;
+			const clickPt: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
+			const matches = rooms.filter((cfg) => {
+				const hull = roomScreenHull(cfg, rect);
+				return hull.length >= 3 && pointInPolygon(clickPt, hull);
+			});
+			if (matches.length) {
+				// Prefer the smaller room when hulls overlap on screen (e.g. the
+				// armory's hull sits within the big room's) — the more specific,
+				// visually "inner" room is what a click there means.
+				matches.sort((a, b) => a.size[0] * a.size[1] - b.size[0] * b.size[1]);
+				const zoneId = matches[0].id;
 				if (focusedZoneId === zoneId) return; // already focused, no-op
 				focusRoom(zoneId);
 				return;
