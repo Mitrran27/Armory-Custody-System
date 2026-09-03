@@ -18,7 +18,7 @@ const statusEnum = z.enum(['active', 'suspended', 'off_duty']);
 const createSchema = z.object({
 	name: z.string().min(1),
 	rank: z.string().min(1),
-	unit: z.string().min(1),
+	companyId: z.string().min(1),
 	clearance: clearanceEnum,
 	status: statusEnum.optional(),
 	photoInitials: z.string().min(1).max(4),
@@ -33,10 +33,10 @@ guardsRouter.get(
 	'/',
 	asyncHandler(async (req, res) => {
 		const includeDeleted = req.query.includeDeleted === 'true';
-		const rows = await db
-			.select()
-			.from(guards)
-			.where(includeDeleted ? undefined : isNull(guards.deletedAt));
+		const rows = await db.query.guards.findMany({
+			where: includeDeleted ? undefined : isNull(guards.deletedAt),
+			with: { company: true }
+		});
 		res.json(rows);
 	})
 );
@@ -44,7 +44,7 @@ guardsRouter.get(
 guardsRouter.get(
 	'/:id',
 	asyncHandler(async (req, res) => {
-		const [row] = await db.select().from(guards).where(eq(guards.id, pid(req.params.id)));
+		const row = await db.query.guards.findFirst({ where: eq(guards.id, pid(req.params.id)), with: { company: true } });
 		if (!row) throw new ApiError(404, 'Guard not found.');
 		res.json(row);
 	})

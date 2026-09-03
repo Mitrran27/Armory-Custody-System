@@ -61,10 +61,10 @@ guardAuthRouter.post(
 	asyncHandler(async (req, res) => {
 		const { email, code } = verifyOtpSchema.parse(req.body);
 
-		const [guard] = await db
-			.select()
-			.from(guards)
-			.where(and(eq(guards.email, email.toLowerCase()), isNull(guards.deletedAt)));
+		const guard = await db.query.guards.findFirst({
+			where: and(eq(guards.email, email.toLowerCase()), isNull(guards.deletedAt)),
+			with: { company: true }
+		});
 		if (!guard) throw new ApiError(404, 'No guard account found for that email.');
 
 		const [latestOtp] = await db
@@ -90,7 +90,7 @@ guardAuthRouter.post(
 
 		res.json({
 			token,
-			guard: { id: guard.id, name: guard.name, rank: guard.rank, unit: guard.unit, email: guard.email }
+			guard: { id: guard.id, name: guard.name, rank: guard.rank, unit: guard.company?.name ?? '', email: guard.email }
 		});
 	})
 );
@@ -99,11 +99,11 @@ guardAuthRouter.get(
 	'/me',
 	requireGuardAuth,
 	asyncHandler(async (req, res) => {
-		const [guard] = await db
-			.select()
-			.from(guards)
-			.where(and(eq(guards.id, req.guard!.sub), isNull(guards.deletedAt)));
+		const guard = await db.query.guards.findFirst({
+			where: and(eq(guards.id, req.guard!.sub), isNull(guards.deletedAt)),
+			with: { company: true }
+		});
 		if (!guard) throw new ApiError(404, 'Guard not found.');
-		res.json({ id: guard.id, name: guard.name, rank: guard.rank, unit: guard.unit, email: guard.email, status: guard.status });
+		res.json({ id: guard.id, name: guard.name, rank: guard.rank, unit: guard.company?.name ?? '', email: guard.email, status: guard.status });
 	})
 );

@@ -3,6 +3,7 @@ import { inArray } from 'drizzle-orm';
 import { db, pool } from './index.js';
 import {
 	roles,
+	companies,
 	systemUsers,
 	guards,
 	zones,
@@ -81,13 +82,23 @@ async function seed() {
 	// Guards
 	// -------------------------------------------------------------------
 
+	// -------------------------------------------------------------------
+	// Companies — a real lookup table for guard organizational units
+	// -------------------------------------------------------------------
+
+	await db.insert(companies).values([
+		{ id: 'company-1st-guard', name: '1st Guard Company' },
+		{ id: 'company-2nd-guard', name: '2nd Guard Company' },
+		{ id: 'company-3rd-guard', name: '3rd Guard Company' }
+	]);
+
 	await db.insert(guards).values([
-		{ id: 'G-1042', name: 'Matt Armstrong', email: 'matt.armstrong@mg.com', rank: 'Cpl', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'AH', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T05:58:00+08:00'), currentZoneId: 'zone-c' },
-		{ id: 'G-1087', name: 'Ronaldo', email: 'ronaldo@mg.com', rank: 'Sgt', unit: '2nd Guard Company', clearance: 'level_3', status: 'active', photoInitials: 'NZ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T06:02:00+08:00'), currentZoneId: 'zone-b' },
-		{ id: 'G-1103', name: 'Messi', email: 'messi@mg.com', rank: 'Pte', unit: '2nd Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'FD', biometricEnrolled: true, tokenIssued: true, shift: '1400–2200', lastSeen: new Date('2026-08-25T21:40:00+08:00'), currentZoneId: null },
-		{ id: 'G-1119', name: 'D.Johnson', email: 'd.johnson@mg.com', rank: 'Cpl', unit: '1st Guard Company', clearance: 'level_2', status: 'active', photoInitials: 'SK', biometricEnrolled: true, tokenIssued: true, shift: '2200–0600', lastSeen: new Date('2026-08-25T22:05:00+08:00'), currentZoneId: null },
-		{ id: 'G-1155', name: 'Tony Stark', email: 'tony.stark@mg.com', rank: 'Pte', unit: '1st Guard Company', clearance: 'level_1', status: 'off_duty', photoInitials: 'WJ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-24T14:10:00+08:00'), currentZoneId: null },
-		{ id: 'G-1176', name: 'Vijay', email: 'vijay@mg.com', rank: 'Sgt', unit: '3rd Guard Company', clearance: 'level_3', status: 'suspended', photoInitials: 'NA', biometricEnrolled: false, tokenIssued: false, shift: 'Unassigned', lastSeen: new Date('2026-08-18T09:12:00+08:00'), currentZoneId: null }
+		{ id: 'G-1042', name: 'Matt Armstrong', email: 'matt.armstrong@mg.com', rank: 'Cpl', companyId: 'company-2nd-guard', clearance: 'level_3', status: 'active', photoInitials: 'AH', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T05:58:00+08:00'), currentZoneId: 'zone-c' },
+		{ id: 'G-1087', name: 'Ronaldo', email: 'ronaldo@mg.com', rank: 'Sgt', companyId: 'company-2nd-guard', clearance: 'level_3', status: 'active', photoInitials: 'NZ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-26T06:02:00+08:00'), currentZoneId: 'zone-b' },
+		{ id: 'G-1103', name: 'Messi', email: 'messi@mg.com', rank: 'Pte', companyId: 'company-2nd-guard', clearance: 'level_2', status: 'active', photoInitials: 'FD', biometricEnrolled: true, tokenIssued: true, shift: '1400–2200', lastSeen: new Date('2026-08-25T21:40:00+08:00'), currentZoneId: null },
+		{ id: 'G-1119', name: 'D.Johnson', email: 'd.johnson@mg.com', rank: 'Cpl', companyId: 'company-1st-guard', clearance: 'level_2', status: 'active', photoInitials: 'SK', biometricEnrolled: true, tokenIssued: true, shift: '2200–0600', lastSeen: new Date('2026-08-25T22:05:00+08:00'), currentZoneId: null },
+		{ id: 'G-1155', name: 'Tony Stark', email: 'tony.stark@mg.com', rank: 'Pte', companyId: 'company-1st-guard', clearance: 'level_1', status: 'off_duty', photoInitials: 'WJ', biometricEnrolled: true, tokenIssued: true, shift: '0600–1400', lastSeen: new Date('2026-08-24T14:10:00+08:00'), currentZoneId: null },
+		{ id: 'G-1176', name: 'Vijay', email: 'vijay@mg.com', rank: 'Sgt', companyId: 'company-3rd-guard', clearance: 'level_3', status: 'suspended', photoInitials: 'NA', biometricEnrolled: false, tokenIssued: false, shift: 'Unassigned', lastSeen: new Date('2026-08-18T09:12:00+08:00'), currentZoneId: null }
 	]);
 
 	// Open zone sessions matching the two guards shown "currently inside" on the frontend

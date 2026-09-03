@@ -102,13 +102,32 @@ export const otpCodes = pgTable(
 // Guards Management
 // ---------------------------------------------------------------------------
 
+/**
+ * Companies (guard organizational units, e.g. "2nd Guard Company") — a real
+ * lookup table instead of a free-text string repeated on every guard row.
+ * Same normalization pattern as `roles`: a small set of named entities that
+ * multiple guards belong to, so a typo ("2nd Gaurd Company") can't silently
+ * create a phantom unit, and renaming a company is a one-row update instead
+ * of a find-and-replace across every guard.
+ */
+export const companies = pgTable('companies', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	description: text('description'),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+	deletedAt: timestamp('deleted_at', { withTimezone: true })
+});
+
 export const guards = pgTable(
 	'guards',
 	{
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
 		rank: text('rank').notNull(),
-		unit: text('unit').notNull(),
+		companyId: text('company_id')
+			.notNull()
+			.references(() => companies.id),
 		clearance: clearanceLevelEnum('clearance').notNull(),
 		status: guardStatusEnum('status').notNull().default('active'),
 		photoInitials: text('photo_initials').notNull(),
@@ -123,7 +142,7 @@ export const guards = pgTable(
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 		deletedAt: timestamp('deleted_at', { withTimezone: true })
 	},
-	(t) => [index('guards_deleted_at_idx').on(t.deletedAt), uniqueIndex('guards_email_idx').on(t.email)]
+	(t) => [index('guards_deleted_at_idx').on(t.deletedAt), uniqueIndex('guards_email_idx').on(t.email), index('guards_company_idx').on(t.companyId)]
 );
 
 /**
@@ -471,7 +490,12 @@ export const guardOtpCodesRelations = relations(guardOtpCodes, ({ one }) => ({
 	guard: one(guards, { fields: [guardOtpCodes.guardId], references: [guards.id] })
 }));
 
+export const companiesRelations = relations(companies, ({ many }) => ({
+	guards: many(guards)
+}));
+
 export const guardsRelations = relations(guards, ({ one, many }) => ({
+	company: one(companies, { fields: [guards.companyId], references: [companies.id] }),
 	currentZone: one(zones, { fields: [guards.currentZoneId], references: [zones.id] }),
 	firearmsHeld: many(firearms),
 	zoneSessions: many(zoneSessions),

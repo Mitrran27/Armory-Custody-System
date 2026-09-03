@@ -19,6 +19,7 @@ import type {
 	AuditSeverity,
 	CameraConfig,
 	ClearanceLevel,
+	Company,
 	DoorConfig,
 	Firearm,
 	Guard,
@@ -37,6 +38,16 @@ import type {
 // Guards
 // ---------------------------------------------------------------------------
 
+export const companiesApi = {
+	list: async (opts: { includeDeleted?: boolean } = {}) =>
+		apiFetch<Company[]>('/api/companies', { query: { includeDeleted: opts.includeDeleted } }),
+	create: async (body: { name: string; description?: string | null }) => apiFetch<Company>('/api/companies', { method: 'POST', body }),
+	update: async (id: string, body: Partial<{ name: string; description: string | null }>) =>
+		apiFetch<Company>(`/api/companies/${id}`, { method: 'PATCH', body }),
+	remove: async (id: string) => apiFetch<{ message: string }>(`/api/companies/${id}`, { method: 'DELETE' }),
+	restore: async (id: string) => apiFetch<{ message: string }>(`/api/companies/${id}/restore`, { method: 'POST' })
+};
+
 export const guardsApi = {
 	list: async (opts: { includeDeleted?: boolean } = {}) =>
 		(await apiFetch<any[]>('/api/guards', { query: { includeDeleted: opts.includeDeleted } })).map(mapGuard),
@@ -44,7 +55,7 @@ export const guardsApi = {
 	create: async (body: {
 		name: string;
 		rank: string;
-		unit: string;
+		companyId: string;
 		clearance: ClearanceLevel;
 		status?: GuardStatus;
 		photoInitials: string;

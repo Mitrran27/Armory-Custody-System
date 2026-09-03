@@ -243,6 +243,10 @@ A few things worth knowing if you're extending the schema:
 - `system_users.role` is a real foreign key to a `roles` table, not a bare
   Postgres enum — `GET /api/roles` exists and the System Users page reads
   labels from it rather than hardcoding them.
+- `guards.companyId` is a real foreign key to a `companies` table, not a
+  free-text `unit` string repeated on every guard row — `GET /api/companies`
+  exists and the Guards page's enrollment form is a dropdown populated from
+  it, not a free-text field a typo could silently fork into a phantom unit.
 - `rooms` and `qr_scanners` share their parent's primary key directly
   (`rooms.id` *is* `zones.id`) rather than carrying a redundant synthetic
   key alongside a unique foreign key back to the same parent — the right

@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import QRCode from 'qrcode';
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import { guardsApi, firearmsApi, auditApi } from '$lib/api/resources';
+	import { guardsApi, firearmsApi, auditApi, companiesApi } from '$lib/api/resources';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { ApiError } from '$lib/api/client';
 	import { Search, X, Fingerprint, KeyRound, Plus, Ban, Loader2, QrCode } from 'lucide-svelte';
-	import type { Guard, GuardStatus, Firearm, AuditEvent, ClearanceLevel } from '$lib/types';
+	import type { Guard, GuardStatus, Firearm, AuditEvent, ClearanceLevel, Company } from '$lib/types';
 
 	let guards = $state<Guard[]>([]);
 	let firearms = $state<Firearm[]>([]);
+	let companies = $state<Company[]>([]);
 	let loading = $state(true);
 	let errorMsg = $state<string | null>(null);
 
@@ -20,9 +22,10 @@
 
 	let showCreate = $state(false);
 	let creating = $state(false);
-	let form = $state({ name: '', rank: '', unit: '', clearance: 'level_1' as ClearanceLevel, photoInitials: '', shift: '' });
+	let form = $state({ name: '', rank: '', companyId: '', clearance: 'level_1' as ClearanceLevel, photoInitials: '', shift: '' });
 
 	let qrIssued = $state<{ code: string; expiresAt: string } | null>(null);
+	let qrDataUrl = $state<string | null>(null);
 	let qrLoading = $state(false);
 
 	const canManage = $derived(auth.hasRole('admin', 'duty_officer'));
@@ -31,7 +34,8 @@
 		loading = true;
 		errorMsg = null;
 		try {
-			[guards, firearms] = await Promise.all([guardsApi.list(), firearmsApi.list()]);
+			[guards, firearms, companies] = await Promise.all([guardsApi.list(), firearmsApi.list(), companiesApi.list()]);
+			if (!form.companyId && companies[0]) form.companyId = companies[0].id;
 		} catch (err) {
 			errorMsg = err instanceof ApiError ? err.message : 'Failed to load guards.';
 		} finally {
@@ -52,6 +56,7 @@
 
 	$effect(() => {
 		qrIssued = null;
+		qrDataUrl = null;
 		if (!selectedId) {
 			selectedHistory = [];
 			return;
@@ -75,7 +80,7 @@
 			const created = await guardsApi.create({ ...form, photoInitials: form.photoInitials.toUpperCase() });
 			guards = [...guards, created];
 			showCreate = false;
-			form = { name: '', rank: '', unit: '', clearance: 'level_1', photoInitials: '', shift: '' };
+			form = { name: '', rank: '', companyId: companies[0]?.id ?? '', clearance: 'level_1', photoInitials: '', shift: '' };
 			selectedId = created.id;
 		} catch (err) {
 			errorMsg = err instanceof ApiError ? err.message : 'Failed to create guard.';
@@ -100,6 +105,7 @@
 		errorMsg = null;
 		try {
 			qrIssued = await guardsApi.issueQrToken(g.id, 'DOOR-01');
+			qrDataUrl = await QRCode.toDataURL(qrIssued.code, { width: 200, margin: 1, color: { dark: '#0b0f14', light: '#ffffff' } });
 		} catch (err) {
 			errorMsg = err instanceof ApiError ? err.message : 'Failed to issue QR token.';
 		} finally {
@@ -136,7 +142,10 @@
 			<form onsubmit={submitCreate} class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 				<input required bind:value={form.name} placeholder="Full name" class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none" />
 				<input required bind:value={form.rank} placeholder="Rank (e.g. Cpl)" class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none" />
-				<input required bind:value={form.unit} placeholder="Unit" class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none" />
+				<select required bind:value={form.companyId} class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink-dim focus:border-accent/60 focus:outline-none">
+					<option value="" disabled>Company…</option>
+					{#each companies as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+				</select>
 				<select bind:value={form.clearance} class="rounded-sm border border-line bg-panel-raised px-3 py-2 text-[13px] text-ink-dim focus:border-accent/60 focus:outline-none">
 					<option value="level_1">Level 1</option>
 					<option value="level_2">Level 2</option>
@@ -162,7 +171,7 @@
 						<Search size={14} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-faint" />
 						<input
 							bind:value={query}
-							placeholder="Search name, ID, unit…"
+							placeholder="Search name, ID, company…"
 							class="w-full rounded-sm border border-line bg-panel-raised py-1.5 pr-3 pl-8 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none"
 						/>
 					</div>
@@ -187,7 +196,7 @@
 						<thead>
 							<tr class="eyebrow border-b border-line text-[10px]">
 								<th class="px-4 py-2.5 font-normal">Guard</th>
-								<th class="px-4 py-2.5 font-normal">Unit</th>
+								<th class="px-4 py-2.5 font-normal">Company</th>
 								<th class="px-4 py-2.5 font-normal">Clearance</th>
 								<th class="px-4 py-2.5 font-normal">Shift</th>
 								<th class="px-4 py-2.5 font-normal">Credentials</th>
@@ -237,7 +246,7 @@
 						<button class="text-ink-faint hover:text-ink" onclick={() => (selectedId = null)}><X size={14} /></button>
 					{/snippet}
 					<dl class="space-y-2 text-[12px]">
-						<div class="flex justify-between"><dt class="text-ink-dim">Unit</dt><dd class="text-ink">{selected.unit}</dd></div>
+						<div class="flex justify-between"><dt class="text-ink-dim">Company</dt><dd class="text-ink">{selected.unit}</dd></div>
 						<div class="flex justify-between"><dt class="text-ink-dim">Clearance</dt><dd class="text-ink uppercase">{selected.clearance.replace('level_', 'Level ')}</dd></div>
 						<div class="flex justify-between"><dt class="text-ink-dim">Shift</dt><dd class="data-value text-ink">{selected.shift}</dd></div>
 						<div class="flex justify-between"><dt class="text-ink-dim">Biometric enrolled</dt><dd><StatusPill tone={selected.biometricEnrolled ? 'clear' : 'alert'}>{selected.biometricEnrolled ? 'yes' : 'no'}</StatusPill></dd></div>
@@ -270,9 +279,14 @@
 								{#if qrLoading}<Loader2 size={13} class="animate-spin" />{:else}<QrCode size={13} />{/if} Issue QR token (Door 1)
 							</button>
 							{#if qrIssued}
-								<div class="rounded-sm border border-line bg-panel-raised p-2.5 text-center">
-									<p class="data-value text-[13px] break-all text-ink">{qrIssued.code}</p>
-									<p class="mt-1 text-[11px] text-ink-dim">Expires {new Date(qrIssued.expiresAt).toLocaleTimeString('en-MY')}</p>
+								<div class="rounded-sm border border-line bg-panel-raised p-3 text-center">
+									{#if qrDataUrl}
+										<div class="mx-auto w-fit rounded-sm bg-white p-2.5">
+											<img src={qrDataUrl} alt="Entry QR code for {selected.name}" width="180" height="180" />
+										</div>
+									{/if}
+									<p class="mt-2 text-[11px] text-ink-dim">Expires {new Date(qrIssued.expiresAt).toLocaleTimeString('en-MY')}</p>
+									<p class="data-value mt-1 text-[10px] break-all text-ink-faint">{qrIssued.code}</p>
 								</div>
 							{/if}
 							<button

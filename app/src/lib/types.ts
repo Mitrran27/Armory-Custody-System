@@ -15,11 +15,18 @@ export type ClearanceLevel = 'level_1' | 'level_2' | 'level_3';
 
 export type GuardStatus = 'active' | 'suspended' | 'off_duty';
 
+export interface Company {
+	id: string;
+	name: string;
+	description: string | null;
+}
+
 export interface Guard {
 	id: string;
 	name: string;
 	rank: string;
-	unit: string;
+	unit: string; // display name, resolved from the linked company
+	companyId: string;
 	clearance: ClearanceLevel;
 	status: GuardStatus;
 	photoInitials: string;
