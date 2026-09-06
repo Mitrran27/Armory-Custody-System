@@ -2,11 +2,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { accessRequests, doors, guards, qrTokens } from '../db/schema.js';
+import { accessRequests, doors, guards, qrTokens, activityLogs } from '../db/schema.js';
 import { genId } from '../utils/ids.js';
 import { asyncHandler, ApiError } from '../utils/asyncHandler.js';
 import { requireGuardAuth } from '../middleware/auth.js';
 import { createNotification } from '../services/notifications.js';
+import { createActivityLog } from '../services/activityLog.js';
+import { createAuditEvent } from '../services/audit.js';
+import { saveCapturedImage } from '../utils/imageStorage.js';
 import { randomBytes } from 'node:crypto';
 
 export const guardSelfRouter = Router();
@@ -109,5 +112,74 @@ guardSelfRouter.post(
 			.returning();
 
 		res.status(201).json({ code: token.code, doorId: door.id, expiresAt: token.expiresAt, ttlSeconds: QR_TOKEN_TTL_SECONDS });
+	})
+);
+
+// --- Clock in / clock out (activity log only — no audit trail entry; this is a duty-session marker, not a security event) ---
+
+const clockSchema = z.object({ imageDataUrl: z.string().optional() });
+
+guardSelfRouter.post(
+	'/clock-in',
+	asyncHandler(async (req, res) => {
+		const { imageDataUrl } = clockSchema.parse(req.body ?? {});
+		const [guard] = await db.select().from(guards).where(and(eq(guards.id, req.guard!.sub), isNull(guards.deletedAt)));
+		if (!guard) throw new ApiError(404, 'Guard not found.');
+
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
+		const log = await createActivityLog(db, {
+			eventType: 'clock_in',
+			personName: guard.name,
+			guardId: guard.id,
+			detail: `${guard.name} clocked in`,
+			imageUrl
+		});
+		await createAuditEvent(db, {
+			type: 'clock_in',
+			actorName: guard.name,
+			actorGuardId: guard.id,
+			detail: `${guard.name} clocked in`
+		});
+		await db.update(guards).set({ lastSeen: new Date() }).where(eq(guards.id, guard.id));
+		res.status(201).json(log);
+	})
+);
+
+guardSelfRouter.post(
+	'/clock-out',
+	asyncHandler(async (req, res) => {
+		const { imageDataUrl } = clockSchema.parse(req.body ?? {});
+		const [guard] = await db.select().from(guards).where(and(eq(guards.id, req.guard!.sub), isNull(guards.deletedAt)));
+		if (!guard) throw new ApiError(404, 'Guard not found.');
+
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
+		const log = await createActivityLog(db, {
+			eventType: 'clock_out',
+			personName: guard.name,
+			guardId: guard.id,
+			detail: `${guard.name} clocked out`,
+			imageUrl
+		});
+		await createAuditEvent(db, {
+			type: 'clock_out',
+			actorName: guard.name,
+			actorGuardId: guard.id,
+			detail: `${guard.name} clocked out`
+		});
+		res.status(201).json(log);
+	})
+);
+
+/** This guard's own activity log entries. */
+guardSelfRouter.get(
+	'/activity-logs',
+	asyncHandler(async (req, res) => {
+		const rows = await db
+			.select()
+			.from(activityLogs)
+			.where(eq(activityLogs.guardId, req.guard!.sub))
+			.orderBy(desc(activityLogs.timestamp))
+			.limit(100);
+		res.json(rows);
 	})
 );

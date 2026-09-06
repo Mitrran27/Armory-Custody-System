@@ -3,11 +3,11 @@
 	import QRCode from 'qrcode';
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import { guardsApi, firearmsApi, auditApi, companiesApi } from '$lib/api/resources';
+	import { guardsApi, firearmsApi, companiesApi } from '$lib/api/resources';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { ApiError } from '$lib/api/client';
 	import { Search, X, Fingerprint, KeyRound, Plus, Ban, Loader2, QrCode } from 'lucide-svelte';
-	import type { Guard, GuardStatus, Firearm, AuditEvent, ClearanceLevel, Company } from '$lib/types';
+	import type { Guard, GuardStatus, Firearm, ClearanceLevel, Company } from '$lib/types';
 
 	let guards = $state<Guard[]>([]);
 	let firearms = $state<Firearm[]>([]);
@@ -18,7 +18,6 @@
 	let query = $state('');
 	let statusFilter = $state<GuardStatus | 'all'>('all');
 	let selectedId = $state<string | null>(null);
-	let selectedHistory = $state<AuditEvent[]>([]);
 
 	let showCreate = $state(false);
 	let creating = $state(false);
@@ -57,13 +56,6 @@
 	$effect(() => {
 		qrIssued = null;
 		qrDataUrl = null;
-		if (!selectedId) {
-			selectedHistory = [];
-			return;
-		}
-		auditApi.list({ limit: 40 }).then((events) => {
-			selectedHistory = events.filter((e) => e.actorGuardId === selectedId);
-		});
 	});
 
 	function statusTone(s: GuardStatus) {
@@ -254,20 +246,6 @@
 						<div class="flex justify-between"><dt class="text-ink-dim">Current zone</dt><dd class="text-ink">{selected.currentZone ? selected.currentZone.replace('zone-', 'Zone ').toUpperCase() : '—'}</dd></div>
 						<div class="flex justify-between"><dt class="text-ink-dim">Carrying</dt><dd class="text-ink">{selectedFirearm ? `${selectedFirearm.model} (${selectedFirearm.serial})` : '—'}</dd></div>
 					</dl>
-
-					<div class="mt-5 border-t border-line pt-4">
-						<p class="eyebrow mb-2">Recent activity</p>
-						<ul class="space-y-2">
-							{#each selectedHistory.slice(0, 4) as e (e.id)}
-								<li class="rounded-sm border border-line bg-panel-raised p-2.5 text-[12px]">
-									<p class="text-ink">{e.detail}</p>
-									<p class="mt-0.5 text-[11px] text-ink-dim">{new Date(e.timestamp).toLocaleString('en-MY')}</p>
-								</li>
-							{:else}
-								<li class="text-[12px] text-ink-dim">No recent activity on record.</li>
-							{/each}
-						</ul>
-					</div>
 
 					{#if canManage}
 						<div class="mt-4 space-y-2">

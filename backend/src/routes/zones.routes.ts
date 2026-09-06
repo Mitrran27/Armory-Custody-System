@@ -7,7 +7,9 @@ import { asyncHandler, ApiError, pid } from '../utils/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { createAuditEvent } from '../services/audit.js';
+import { createActivityLog } from '../services/activityLog.js';
 import { admitGuardToZone } from '../services/zoneEntry.js';
+import { saveCapturedImage } from '../utils/imageStorage.js';
 
 export const zonesRouter = Router();
 zonesRouter.use(requireAuth);
@@ -53,27 +55,29 @@ zonesRouter.patch(
 	})
 );
 
-const entrySchema = z.object({ guardId: z.string().min(1), method: gateEnum });
+const entrySchema = z.object({ guardId: z.string().min(1), method: gateEnum, imageDataUrl: z.string().optional() });
 
-/** Records a guard entering a zone: opens a ZoneSession, updates guard + zone state, appends an audit event. */
+/** Records a guard entering a zone: opens a ZoneSession, updates guard + zone state, appends an audit event + activity log entry. */
 zonesRouter.post(
 	'/:id/entry',
 	requireRole('admin', 'duty_officer', 'armorer'),
 	asyncHandler(async (req, res) => {
-		const { guardId, method } = entrySchema.parse(req.body);
-		const result = await admitGuardToZone({ guardId, zoneId: pid(req.params.id), method });
+		const { guardId, method, imageDataUrl } = entrySchema.parse(req.body);
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
+		const result = await admitGuardToZone({ guardId, zoneId: pid(req.params.id), method, imageUrl });
 		res.status(201).json(result);
 	})
 );
 
-const exitSchema = z.object({ guardId: z.string().min(1) });
+const exitSchema = z.object({ guardId: z.string().min(1), imageDataUrl: z.string().optional() });
 
-/** Records a guard leaving a zone: closes their ZoneSession, updates guard + zone state, appends an audit event. */
+/** Records a guard leaving a zone: closes their ZoneSession, updates guard + zone state, appends an audit event + activity log entry. */
 zonesRouter.post(
 	'/:id/exit',
 	requireRole('admin', 'duty_officer', 'armorer'),
 	asyncHandler(async (req, res) => {
-		const { guardId } = exitSchema.parse(req.body);
+		const { guardId, imageDataUrl } = exitSchema.parse(req.body);
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
 
 		const result = await db.transaction(async (tx) => {
 			const [zone] = await tx.select().from(zones).where(eq(zones.id, pid(req.params.id)));
@@ -113,7 +117,16 @@ zonesRouter.post(
 				detail: `${guard.name} exited ${zone.label}`
 			});
 
-			return { session, event };
+			const log = await createActivityLog(tx, {
+				eventType: 'zone_exit',
+				personName: guard.name,
+				guardId: guard.id,
+				zoneId: zone.id,
+				detail: `${guard.name} exited ${zone.label}`,
+				imageUrl
+			});
+
+			return { session, event, log };
 		});
 
 		res.json(result);

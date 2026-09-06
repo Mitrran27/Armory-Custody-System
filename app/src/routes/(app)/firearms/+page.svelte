@@ -2,10 +2,11 @@
 	import { onMount } from 'svelte';
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
+	import PhotoCaptureModal from '$lib/components/PhotoCaptureModal.svelte';
 	import { firearmsApi, guardsApi, usersApi } from '$lib/api/resources';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { ApiError } from '$lib/api/client';
-	import { Search, X, Wrench, Plus, Loader2, LogOut, LogIn, CheckCircle2 } from 'lucide-svelte';
+	import { Search, X, Wrench, Plus, Loader2, LogOut, LogIn, CheckCircle2, Crosshair, Sparkles } from 'lucide-svelte';
 	import type { Firearm, FirearmStatus, Guard, SystemUser } from '$lib/types';
 
 	let firearms = $state<Firearm[]>([]);
@@ -27,6 +28,10 @@
 	let assignWork = $state('');
 	let assignNextDue = $state('');
 	let showAssign = $state(false);
+
+	// Pending action awaiting a captured photo — set right before opening PhotoCaptureModal, consumed once a photo (or skip) comes back.
+	let pendingAction = $state<'checkout' | 'checkin' | null>(null);
+	let pendingServiceTypes = $state<('chamber_clearance' | 'cleaning')[]>([]);
 
 	const canManageFirearms = $derived(auth.hasRole('admin', 'armorer'));
 	const canCheckout = $derived(auth.hasRole('admin', 'armorer', 'duty_officer'));
@@ -98,34 +103,60 @@
 		}
 	}
 
-	async function doCheckout() {
-		if (!selected || !checkoutGuardId) return;
+	function startCheckout() {
+		if (!checkoutGuardId) return;
+		pendingAction = 'checkout';
+	}
+	function startCheckin() {
+		pendingAction = 'checkin';
+	}
+
+	async function finishCheckoutOrCheckin(imageDataUrl?: string) {
+		if (!selected || !pendingAction) return;
 		busy = true;
 		errorMsg = null;
 		try {
-			const { firearm } = await firearmsApi.checkout(selected.id, checkoutGuardId);
-			firearms = firearms.map((f) => (f.id === firearm.id ? firearm : f));
-			checkoutGuardId = '';
+			if (pendingAction === 'checkout') {
+				const { firearm } = await firearmsApi.checkout(selected.id, checkoutGuardId, imageDataUrl);
+				firearms = firearms.map((f) => (f.id === firearm.id ? firearm : f));
+				checkoutGuardId = '';
+			} else {
+				const { firearm } = await firearmsApi.checkin(selected.id, imageDataUrl);
+				firearms = firearms.map((f) => (f.id === firearm.id ? firearm : f));
+			}
+			await refreshOne(selected.id);
+			pendingAction = null;
 		} catch (err) {
-			errorMsg = err instanceof ApiError ? err.message : 'Checkout failed.';
+			errorMsg = err instanceof ApiError ? err.message : 'Action failed.';
 		} finally {
 			busy = false;
 		}
 	}
 
-	async function doCheckin() {
-		if (!selected) return;
+	let showServiceModal = $state(false);
+	function openServiceModal(type: 'chamber_clearance' | 'cleaning') {
+		pendingServiceTypes = [type];
+		showServiceModal = true;
+	}
+
+	async function finishService(imageDataUrl?: string) {
+		if (!selected || pendingServiceTypes.length === 0) return;
 		busy = true;
 		errorMsg = null;
 		try {
-			const { firearm } = await firearmsApi.checkin(selected.id);
-			firearms = firearms.map((f) => (f.id === firearm.id ? firearm : f));
+			const updated = await firearmsApi.service(selected.id, { serviceTypes: pendingServiceTypes, imageDataUrl });
+			firearms = firearms.map((f) => (f.id === updated.id ? updated : f));
+			await refreshOne(selected.id);
+			showServiceModal = false;
+			pendingServiceTypes = [];
 		} catch (err) {
-			errorMsg = err instanceof ApiError ? err.message : 'Check-in failed.';
+			errorMsg = err instanceof ApiError ? err.message : 'Failed to record service.';
 		} finally {
 			busy = false;
 		}
 	}
+
+
 
 	async function submitAssign(e: SubmitEvent) {
 		e.preventDefault();
@@ -289,15 +320,29 @@
 											<option value={g.id}>{g.rank} {g.name}</option>
 										{/each}
 									</select>
-									<button onclick={doCheckout} disabled={busy || !checkoutGuardId} class="flex items-center gap-1 rounded-sm border border-accent/40 bg-accent-dim px-3 py-1.5 text-[12px] text-accent disabled:opacity-40">
+									<button onclick={startCheckout} disabled={busy || !checkoutGuardId} class="flex items-center gap-1 rounded-sm border border-accent/40 bg-accent-dim px-3 py-1.5 text-[12px] text-accent disabled:opacity-40">
 										<LogOut size={13} /> Check out
 									</button>
 								</div>
 							{:else if selected.status === 'checked_out'}
-								<button onclick={doCheckin} disabled={busy} class="flex w-full items-center justify-center gap-1.5 rounded-sm border border-clear/40 bg-clear-dim/40 py-1.5 text-[12px] text-clear disabled:opacity-50">
+								<button onclick={startCheckin} disabled={busy} class="flex w-full items-center justify-center gap-1.5 rounded-sm border border-clear/40 bg-clear-dim/40 py-1.5 text-[12px] text-clear disabled:opacity-50">
 									<LogIn size={13} /> Check in
 								</button>
 							{/if}
+						</div>
+					{/if}
+
+					{#if canManageFirearms}
+						<div class="mt-4 border-t border-line pt-4">
+							<p class="eyebrow mb-2">Regular service routine</p>
+							<div class="flex gap-2">
+								<button onclick={() => openServiceModal('chamber_clearance')} disabled={busy} class="flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-line bg-panel-raised py-1.5 text-[12px] text-ink-dim hover:text-ink disabled:opacity-50">
+									<Crosshair size={13} /> Chamber clearance
+								</button>
+								<button onclick={() => openServiceModal('cleaning')} disabled={busy} class="flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-line bg-panel-raised py-1.5 text-[12px] text-ink-dim hover:text-ink disabled:opacity-50">
+									<Sparkles size={13} /> Cleaning
+								</button>
+							</div>
 						</div>
 					{/if}
 
@@ -352,4 +397,25 @@
 			{/if}
 		</div>
 	</div>
+
 </div>
+
+{#if pendingAction}
+	<PhotoCaptureModal
+		title={pendingAction === 'checkout' ? 'Confirm handover' : 'Confirm return'}
+		subtitle={pendingAction === 'checkout' ? `Photo of ${guardName(checkoutGuardId)} receiving ${selected?.model}.` : `Photo of ${selected?.model} being returned.`}
+		onCapture={finishCheckoutOrCheckin}
+		onSkip={() => finishCheckoutOrCheckin(undefined)}
+		onClose={() => (pendingAction = null)}
+	/>
+{/if}
+
+{#if showServiceModal}
+	<PhotoCaptureModal
+		title={pendingServiceTypes[0] === 'chamber_clearance' ? 'Chamber clearance' : 'Cleaning'}
+		subtitle="Photo evidence for {selected?.model}."
+		onCapture={finishService}
+		onSkip={() => finishService(undefined)}
+		onClose={() => (showServiceModal = false)}
+	/>
+{/if}

@@ -1,5 +1,12 @@
 const CACHE_NAME = 'aawcs-shell-v1';
-const SHELL_ASSETS = ['/portal', '/portal/login', '/manifest.webmanifest'];
+const SHELL_ASSETS = [
+	'/portal-armorer',
+	'/portal-armorer/login',
+	'/portal-guard',
+	'/portal-guard/login',
+	'/manifest-armorer.webmanifest',
+	'/manifest-guard.webmanifest'
+];
 
 self.addEventListener('install', (event) => {
 	event.waitUntil(

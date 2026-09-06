@@ -38,7 +38,9 @@ export const auditEventTypeEnum = pgEnum('audit_event_type', [
 	'maintenance',
 	'override',
 	'admin_action',
-	'alert'
+	'alert',
+	'clock_in',
+	'clock_out'
 ]);
 export const auditSeverityEnum = pgEnum('audit_severity', ['info', 'warning', 'critical']);
 
@@ -52,7 +54,7 @@ export const maintenanceStatusEnum = pgEnum('maintenance_status', ['assigned', '
 // ---------------------------------------------------------------------------
 
 export const roles = pgTable('roles', {
-	id: text('id').primaryKey(), // 'admin' | 'duty_officer' | 'armorer' | 'auditor' — stable natural key
+	id: text('id').primaryKey(), // 'admin' | 'duty_officer' | 'armorer' — stable natural key
 	label: text('label').notNull(),
 	description: text('description').notNull()
 });
@@ -434,6 +436,55 @@ export const notifications = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Activity Log — a separate, operational day-to-day log. Deliberately NOT
+// the same thing as the Audit Trail above: the audit trail is a
+// tamper-evident security record (hash-chained, append-only, no edit route
+// for anyone including admin); this is a plain, ordinary log for "who did
+// what, when, with a photo" — clock-ins, zone entry/exit, firearm handover,
+// and firearm servicing — surfaced on the Guards and Firearms detail pages.
+// Both get written to at the same moment for the same real-world event (see
+// services/activityLog.ts and its call sites) — they're two different
+// records of the same action, kept for two different purposes.
+// ---------------------------------------------------------------------------
+
+export const activityEventTypeEnum = pgEnum('activity_event_type', [
+	'clock_in',
+	'clock_out',
+	'zone_entry',
+	'zone_exit',
+	'firearm_taken',
+	'firearm_returned',
+	'chamber_clearance',
+	'cleaning'
+]);
+
+export const activityLogs = pgTable(
+	'activity_logs',
+	{
+		id: text('id').primaryKey(),
+		timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
+		eventType: activityEventTypeEnum('event_type').notNull(),
+		// Exactly one of these two is set — whichever kind of person performed
+		// the action. personName is denormalized so the log still reads
+		// sensibly even if that guard/user is later deleted.
+		guardId: text('guard_id').references(() => guards.id),
+		systemUserId: text('system_user_id').references(() => systemUsers.id),
+		personName: text('person_name').notNull(),
+		zoneId: text('zone_id').references(() => zones.id),
+		firearmId: text('firearm_id').references(() => firearms.id),
+		detail: text('detail').notNull(),
+		/** Relative path under /uploads, e.g. "/uploads/2026-09-01-abc123.jpg" — null if no photo was captured for this event. */
+		imageUrl: text('image_url'),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(t) => [
+		index('activity_logs_guard_idx').on(t.guardId, t.timestamp),
+		index('activity_logs_firearm_idx').on(t.firearmId, t.timestamp),
+		index('activity_logs_timestamp_idx').on(t.timestamp)
+	]
+);
+
+// ---------------------------------------------------------------------------
 // Audit Trail — append-only & hash-chained on purpose (see README §Audit).
 // No deletedAt column and no update/delete route exists for this table, even
 // though every other resource supports soft delete: an editable or deletable
@@ -572,6 +623,13 @@ export const accessRequestsRelations = relations(accessRequests, ({ one }) => ({
 export const notificationsRelations = relations(notifications, ({ one }) => ({
 	relatedAccessRequest: one(accessRequests, { fields: [notifications.relatedAccessRequestId], references: [accessRequests.id] }),
 	recipientRoleRef: one(roles, { fields: [notifications.recipientRole], references: [roles.id] })
+}));
+
+export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
+	guard: one(guards, { fields: [activityLogs.guardId], references: [guards.id] }),
+	systemUser: one(systemUsers, { fields: [activityLogs.systemUserId], references: [systemUsers.id] }),
+	zone: one(zones, { fields: [activityLogs.zoneId], references: [zones.id] }),
+	firearm: one(firearms, { fields: [activityLogs.firearmId], references: [firearms.id] })
 }));
 
 export const auditEventsRelations = relations(auditEvents, ({ one }) => ({

@@ -11,7 +11,7 @@ import { requireRole } from '../middleware/rbac.js';
 export const usersRouter = Router();
 usersRouter.use(requireAuth, requireRole('admin'));
 
-const roleEnum = z.enum(['admin', 'duty_officer', 'armorer', 'auditor']);
+const roleEnum = z.enum(['admin', 'duty_officer', 'armorer']);
 const statusEnum = z.enum(['active', 'disabled']);
 
 const createSchema = z.object({

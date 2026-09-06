@@ -27,9 +27,12 @@
 	} = $props();
 
 	let container: HTMLDivElement;
+	let povCanvas: HTMLCanvasElement;
 	let scene: THREE.Scene;
 	let camera: THREE.PerspectiveCamera;
 	let renderer: THREE.WebGLRenderer;
+	let povRenderer: THREE.WebGLRenderer | null = null;
+	let povCamera: THREE.PerspectiveCamera | null = null;
 	let controls: OrbitControls;
 	let frameId: number;
 	let resizeObserver: ResizeObserver;
@@ -359,6 +362,17 @@
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		container.appendChild(renderer.domElement);
 
+		// Second renderer sharing the same scene, positioned at whichever
+		// camera node is selected — a genuine picture-in-picture render of
+		// this facility from that camera's own position/angle, not a fake
+		// video feed. Only created once povCanvas actually has a selection
+		// to show (see the $effect below).
+		if (povCanvas) {
+			povRenderer = new THREE.WebGLRenderer({ canvas: povCanvas, antialias: true, alpha: true });
+			povRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+			povCamera = new THREE.PerspectiveCamera(60, 1, 0.05, 60);
+		}
+
 		controls = new OrbitControls(camera, renderer.domElement);
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.08;
@@ -495,6 +509,10 @@
 			controls.update();
 			updateFocusAnchor();
 			renderer.render(scene, camera);
+
+			if (povRenderer && povCamera && selectedCameraId) {
+				povRenderer.render(scene, povCamera);
+			}
 		}
 		animate();
 
@@ -533,12 +551,46 @@
 		}
 	});
 
+	// Point the picture-in-picture camera at whichever camera node is
+	// selected, matching that physical camera's own position/target/FOV
+	// exactly — this is what makes the PiP a genuine "view from this
+	// camera" rather than an arbitrary preview angle.
+	$effect(() => {
+		if (!povCamera || !povRenderer || !povCanvas) return;
+		const cfg = cameraLayout.find((c) => c.id === selectedCameraId);
+		if (!cfg) return;
+		povCamera.position.set(...cfg.position);
+		povCamera.up.set(0, 1, 0);
+		povCamera.lookAt(new THREE.Vector3(...cfg.target));
+		povCamera.fov = cfg.fovDeg;
+		povCamera.updateProjectionMatrix();
+
+		const w = povCanvas.clientWidth || 240;
+		const h = povCanvas.clientHeight || 160;
+		povRenderer.setSize(w, h, false);
+		povCamera.aspect = w / h;
+		povCamera.updateProjectionMatrix();
+	});
+
 	onDestroy(() => {
 		if (frameId) cancelAnimationFrame(frameId);
 		resizeObserver?.disconnect();
 		controls?.dispose();
 		renderer?.dispose();
+		povRenderer?.dispose();
 	});
 </script>
 
-<div bind:this={container} class="h-full w-full cursor-grab active:cursor-grabbing"></div>
+<div bind:this={container} class="relative h-full w-full cursor-grab active:cursor-grabbing">
+	<div
+		class="pointer-events-none absolute bottom-3 left-3 z-10 overflow-hidden rounded-sm border border-accent/40 bg-black shadow-lg transition-opacity {selectedCameraId
+			? 'opacity-100'
+			: 'pointer-events-none opacity-0'}"
+	>
+		<canvas bind:this={povCanvas} class="block h-[140px] w-[220px]"></canvas>
+		<div class="absolute top-1 left-1.5 flex items-center gap-1 rounded-sm bg-black/60 px-1.5 py-0.5">
+			<span class="pulse-dot relative h-1.5 w-1.5 rounded-full bg-alert"></span>
+			<span class="font-mono text-[9px] tracking-wide text-white uppercase">{selectedCameraId ?? ''} live</span>
+		</div>
+	</div>
+</div>

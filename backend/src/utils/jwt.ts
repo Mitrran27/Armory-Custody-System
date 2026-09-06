@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 export interface SessionClaims {
 	sub: string; // system user id
 	email: string;
-	role: 'admin' | 'duty_officer' | 'armorer' | 'auditor';
+	role: 'admin' | 'duty_officer' | 'armorer';
 	name: string;
 }
 

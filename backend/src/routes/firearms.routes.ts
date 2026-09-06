@@ -8,7 +8,9 @@ import { asyncHandler, ApiError, pid } from '../utils/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { createAuditEvent } from '../services/audit.js';
+import { createActivityLog } from '../services/activityLog.js';
 import { hasApprovedFirearmAssignment } from '../services/accessControl.js';
+import { saveCapturedImage } from '../utils/imageStorage.js';
 
 export const firearmsRouter = Router();
 firearmsRouter.use(requireAuth);
@@ -117,15 +119,15 @@ firearmsRouter.post(
 	})
 );
 
-// --- Checkout / check-in (state change + audit event, atomically) -----
+// --- Checkout / check-in (state change + audit event + activity log, atomically) -----
 
-const checkoutSchema = z.object({ guardId: z.string().min(1) });
+const checkoutSchema = z.object({ guardId: z.string().min(1), imageDataUrl: z.string().optional() });
 
 firearmsRouter.post(
 	'/:id/checkout',
 	requireRole('admin', 'armorer', 'duty_officer'),
 	asyncHandler(async (req, res) => {
-		const { guardId } = checkoutSchema.parse(req.body);
+		const { guardId, imageDataUrl } = checkoutSchema.parse(req.body);
 
 		// Same pattern as zone entry: check authorization outside the write
 		// transaction so a denial's audit-alert persists even though the
@@ -148,6 +150,8 @@ firearmsRouter.post(
 			});
 			throw new ApiError(403, 'This guard is not authorized to be issued this firearm. An approved firearm assignment request is required.');
 		}
+
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
 
 		const result = await db.transaction(async (tx) => {
 			const [firearm] = await tx.select().from(firearms).where(and(eq(firearms.id, pid(req.params.id)), isNull(firearms.deletedAt)));
@@ -173,17 +177,32 @@ firearmsRouter.post(
 				detail: `${firearm.model} (${firearm.rfidTag}, ${firearm.id}) checked out by ${guard.name}`
 			});
 
-			return { firearm: updated, event };
+			const log = await createActivityLog(tx, {
+				eventType: 'firearm_taken',
+				personName: guard.name,
+				guardId: guard.id,
+				firearmId: firearm.id,
+				zoneId: guard.currentZoneId,
+				detail: `${firearm.model} (${firearm.id}) handed to ${guard.name}${req.user ? ` by ${req.user.name}` : ''}`,
+				imageUrl
+			});
+
+			return { firearm: updated, event, log };
 		});
 
 		res.json(result);
 	})
 );
 
+const checkinSchema = z.object({ imageDataUrl: z.string().optional() }).optional();
+
 firearmsRouter.post(
 	'/:id/checkin',
 	requireRole('admin', 'armorer', 'duty_officer'),
 	asyncHandler(async (req, res) => {
+		const { imageDataUrl } = checkinSchema.parse(req.body) ?? {};
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
+
 		const result = await db.transaction(async (tx) => {
 			const [firearm] = await tx.select().from(firearms).where(and(eq(firearms.id, pid(req.params.id)), isNull(firearms.deletedAt)));
 			if (!firearm) throw new ApiError(404, 'Firearm not found.');
@@ -209,7 +228,17 @@ firearmsRouter.post(
 				detail: `${firearm.model} (${firearm.rfidTag}, ${firearm.id}) returned by ${guard?.name ?? 'unknown guard'}`
 			});
 
-			return { firearm: updated, event };
+			const log = await createActivityLog(tx, {
+				eventType: 'firearm_returned',
+				personName: guard?.name ?? 'Unknown guard',
+				guardId: guard?.id ?? null,
+				firearmId: firearm.id,
+				zoneId: guard?.currentZoneId ?? null,
+				detail: `${firearm.model} (${firearm.id}) returned by ${guard?.name ?? 'unknown guard'}${req.user ? ` to ${req.user.name}` : ''}`,
+				imageUrl
+			});
+
+			return { firearm: updated, event, log };
 		});
 
 		res.json(result);
@@ -421,5 +450,80 @@ firearmsRouter.post(
 			.returning();
 		if (!row) throw new ApiError(404, 'Maintenance record not found or not deleted.');
 		res.json({ message: 'Maintenance record restored.', record: row });
+	})
+);
+
+// --- Regular service routine: chamber clearance + cleaning -------------
+
+const serviceSchema = z.object({
+	serviceTypes: z.array(z.enum(['chamber_clearance', 'cleaning'])).min(1),
+	notes: z.string().optional(),
+	imageDataUrl: z.string().optional()
+});
+
+const SERVICE_LABEL: Record<'chamber_clearance' | 'cleaning', string> = {
+	chamber_clearance: 'Chamber clearance (test-fired on range)',
+	cleaning: 'Cleaning'
+};
+
+/**
+ * Records the two routine service actions every firearm needs periodically
+ * — chamber clearance (test-fired on a range) and cleaning — as their own
+ * logged, timestamped, photo-evidenced entries in the Activity Log. This is
+ * intentionally separate from the more formal "assign a repair to an
+ * armorer" workflow above (POST .../maintenance/assign): that's for actual
+ * faults; this is routine servicing an armorer performs directly, often on
+ * the tablet (see tablet.routes.ts).
+ *
+ * If the firearm was sitting in "maintenance" status, performing service
+ * returns it to "in_armory" — the servicing IS what makes it usable again.
+ */
+firearmsRouter.post(
+	'/:id/service',
+	requireRole('admin', 'armorer'),
+	asyncHandler(async (req, res) => {
+		const body = serviceSchema.parse(req.body);
+		const imageUrl = body.imageDataUrl ? await saveCapturedImage(body.imageDataUrl) : null;
+
+		const result = await db.transaction(async (tx) => {
+			const [firearm] = await tx.select().from(firearms).where(and(eq(firearms.id, pid(req.params.id)), isNull(firearms.deletedAt)));
+			if (!firearm) throw new ApiError(404, 'Firearm not found.');
+
+			const logs = [];
+			for (const serviceType of body.serviceTypes) {
+				const detail = `${SERVICE_LABEL[serviceType]} performed on ${firearm.model} (${firearm.id}) by ${req.user!.name}${body.notes ? ` — ${body.notes}` : ''}`;
+				logs.push(
+					await createActivityLog(tx, {
+						eventType: serviceType,
+						personName: req.user!.name,
+						systemUserId: req.user!.sub,
+						firearmId: firearm.id,
+						detail,
+						imageUrl
+					})
+				);
+				await createAuditEvent(tx, {
+					type: 'maintenance',
+					actorName: req.user!.name,
+					actorUserId: req.user!.sub,
+					firearmId: firearm.id,
+					detail
+				});
+			}
+
+			let updatedFirearm = firearm;
+			if (firearm.status === 'maintenance') {
+				const [updated] = await tx
+					.update(firearms)
+					.set({ status: 'in_armory', tagHealth: 'ok', updatedAt: new Date() })
+					.where(eq(firearms.id, firearm.id))
+					.returning();
+				updatedFirearm = updated;
+			}
+
+			return { firearm: updatedFirearm, logs };
+		});
+
+		res.status(201).json(result);
 	})
 );

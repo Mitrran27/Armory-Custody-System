@@ -50,7 +50,7 @@
 	</button>
 
 	{#if open}
-		<div class="absolute right-0 z-30 mt-2 w-80 rounded-sm border border-line bg-panel shadow-2xl">
+		<div class="absolute right-0 z-50 mt-2 w-80 rounded-sm border border-line bg-panel shadow-2xl">
 			<div class="flex items-center justify-between border-b border-line px-3 py-2.5">
 				<p class="eyebrow">Notifications</p>
 				{#if notifications.unreadCount > 0}

@@ -30,8 +30,7 @@ async function seed() {
 	await db.insert(roles).values([
 		{ id: 'admin', label: 'Administrator', description: 'Full system access — configuration, RBAC, all modules.' },
 		{ id: 'duty_officer', label: 'Duty Officer', description: 'Monitors live view, acknowledges alerts, approves overrides.' },
-		{ id: 'armorer', label: 'Armorer', description: 'Manages firearm inventory and maintenance records.' },
-		{ id: 'auditor', label: 'Auditor', description: 'Read-only access to audit trail and reporting exports.' }
+		{ id: 'armorer', label: 'Armorer', description: 'Manages firearm inventory and maintenance records.' }
 	]);
 
 	// -------------------------------------------------------------------
@@ -74,8 +73,7 @@ async function seed() {
 		{ id: 'U-001', name: 'Mitrran Menon', email: 'mitrran@cre8iot.com', role: 'admin', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:40:00+08:00') },
 		{ id: 'U-002', name: 'Jeevasulogan', email: 'jeevasulogan@cre8iot.com', role: 'duty_officer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-26T05:55:00+08:00') },
 		{ id: 'U-003', name: 'Sasitheran', email: 'sasitheran@cre8iot.com', role: 'armorer', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-25T17:20:00+08:00') },
-		{ id: 'U-004', name: 'Pathma', email: 'pathma@cre8iot.com', role: 'admin', mfaEnabled: false, status: 'active', lastLogin: new Date('2026-08-24T13:05:00+08:00') },
-		{ id: 'U-005', name: 'Test', email: 'test@cre8iot.com', role: 'auditor', mfaEnabled: true, status: 'active', lastLogin: new Date('2026-08-20T09:00:00+08:00') }
+		{ id: 'U-004', name: 'Pathma', email: 'pathma@cre8iot.com', role: 'admin', mfaEnabled: false, status: 'active', lastLogin: new Date('2026-08-24T13:05:00+08:00') }
 	]);
 
 	// -------------------------------------------------------------------
@@ -198,7 +196,7 @@ async function seed() {
 	// -------------------------------------------------------------------
 
 	const auditSeed = [
-		{ id: 'E-90222', type: 'admin_action', severity: 'info', timestamp: '2026-08-20T09:00:00+08:00', actorName: 'Puan Aisyah Nordin', actorUserId: 'U-005', zoneId: null, firearmId: null, detail: 'Exported audit log (2026-08-01 – 2026-08-20) for quarterly review' },
+		{ id: 'E-90222', type: 'admin_action', severity: 'info', timestamp: '2026-08-20T09:00:00+08:00', actorName: 'Mitrran Menon', actorUserId: 'U-001', zoneId: null, firearmId: null, detail: 'Exported audit log (2026-08-01 – 2026-08-20) for quarterly review' },
 		{ id: 'E-90223', type: 'override', severity: 'critical', timestamp: '2026-08-22T03:12:00+08:00', actorName: 'Capt. Siti Rahmah', actorUserId: 'U-002', zoneId: 'zone-a', firearmId: null, detail: 'Manual door override — outer door reader RD-01 offline, supervisor key used' },
 		{ id: 'E-90224', type: 'maintenance', severity: 'info', timestamp: '2026-08-24T09:15:00+08:00', actorName: 'Sgt Halim Mokhtar', actorUserId: 'U-004', zoneId: 'zone-c', firearmId: 'F-0004', detail: 'Trigger group inspection logged for F-0004 after malfunction report' },
 		{ id: 'E-90225', type: 'firearm_returned', severity: 'info', timestamp: '2026-08-25T21:40:02+08:00', actorName: 'Pte Farid Danial Osman', actorGuardId: 'G-1103', zoneId: 'zone-c', firearmId: 'F-0004', detail: 'Glock 19 Gen5 (RF-D442FF, F-0004) returned to Rack B-05' },

@@ -69,7 +69,7 @@ export interface Firearm {
 	maintenance: MaintenanceRecord[];
 }
 
-export type SystemRole = 'admin' | 'duty_officer' | 'armorer' | 'auditor';
+export type SystemRole = 'admin' | 'duty_officer' | 'armorer';
 
 export interface SystemUser {
 	id: string;
@@ -90,7 +90,9 @@ export type AuditEventType =
 	| 'maintenance'
 	| 'override'
 	| 'admin_action'
-	| 'alert';
+	| 'alert'
+	| 'clock_in'
+	| 'clock_out';
 
 export type AuditSeverity = 'info' | 'warning' | 'critical';
 
@@ -181,4 +183,27 @@ export interface Notification {
 	relatedAccessRequestId: string | null;
 	read: boolean;
 	createdAt: string; // ISO
+}
+
+export type ActivityEventType =
+	| 'clock_in'
+	| 'clock_out'
+	| 'zone_entry'
+	| 'zone_exit'
+	| 'firearm_taken'
+	| 'firearm_returned'
+	| 'chamber_clearance'
+	| 'cleaning';
+
+export interface ActivityLog {
+	id: string;
+	timestamp: string; // ISO
+	eventType: ActivityEventType;
+	guardId: string | null;
+	systemUserId: string | null;
+	personName: string;
+	zoneId: ZoneId | null;
+	firearmId: string | null;
+	detail: string;
+	imageUrl: string | null;
 }

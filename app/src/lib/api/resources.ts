@@ -14,6 +14,8 @@ import type {
 	AccessRequest,
 	AccessRequestStatus,
 	AccessRequestType,
+	ActivityEventType,
+	ActivityLog,
 	AuditEvent,
 	AuditEventType,
 	AuditSeverity,
@@ -85,13 +87,13 @@ export const firearmsApi = {
 	remove: async (id: string) => apiFetch<{ message: string }>(`/api/firearms/${id}`, { method: 'DELETE' }),
 	restore: async (id: string) => apiFetch<{ message: string }>(`/api/firearms/${id}/restore`, { method: 'POST' }),
 
-	checkout: async (id: string, guardId: string) =>
-		apiFetch<{ firearm: any; event: any }>(`/api/firearms/${id}/checkout`, { method: 'POST', body: { guardId } }).then((r) => ({
+	checkout: async (id: string, guardId: string, imageDataUrl?: string) =>
+		apiFetch<{ firearm: any; event: any }>(`/api/firearms/${id}/checkout`, { method: 'POST', body: { guardId, imageDataUrl } }).then((r) => ({
 			firearm: mapFirearm(r.firearm),
 			event: mapAuditEvent(r.event)
 		})),
-	checkin: async (id: string) =>
-		apiFetch<{ firearm: any; event: any }>(`/api/firearms/${id}/checkin`, { method: 'POST' }).then((r) => ({
+	checkin: async (id: string, imageDataUrl?: string) =>
+		apiFetch<{ firearm: any; event: any }>(`/api/firearms/${id}/checkin`, { method: 'POST', body: { imageDataUrl } }).then((r) => ({
 			firearm: mapFirearm(r.firearm),
 			event: mapAuditEvent(r.event)
 		})),
@@ -101,7 +103,9 @@ export const firearmsApi = {
 	assignMaintenance: async (id: string, body: { armorerId: string; work: string; nextDue: string; date?: string }) =>
 		mapMaintenance(await apiFetch<any>(`/api/firearms/${id}/maintenance/assign`, { method: 'POST', body })),
 	completeMaintenance: async (recordId: string, body: { work?: string; returnToService?: boolean } = {}) =>
-		mapMaintenance(await apiFetch<any>(`/api/firearms/maintenance/${recordId}/complete`, { method: 'POST', body }))
+		mapMaintenance(await apiFetch<any>(`/api/firearms/maintenance/${recordId}/complete`, { method: 'POST', body })),
+	service: async (id: string, body: { serviceTypes: ('chamber_clearance' | 'cleaning')[]; notes?: string; imageDataUrl?: string }) =>
+		apiFetch<{ firearm: any }>(`/api/firearms/${id}/service`, { method: 'POST', body }).then((r) => mapFirearm(r.firearm))
 };
 
 // ---------------------------------------------------------------------------
@@ -200,4 +204,27 @@ export const notificationsApi = {
 	list: async (): Promise<Notification[]> => apiFetch<Notification[]>('/api/notifications'),
 	markRead: async (id: string) => apiFetch<Notification>(`/api/notifications/${id}/read`, { method: 'POST' }),
 	markAllRead: async () => apiFetch<{ message: string }>('/api/notifications/read-all', { method: 'POST' })
+};
+
+// ---------------------------------------------------------------------------
+// Activity Log — the operational "who did what, when, with a photo" log.
+// Deliberately separate from Audit Trail (auditApi above) — see backend
+// schema.ts's comment on activityLogs for why.
+// ---------------------------------------------------------------------------
+
+export const activityLogsApi = {
+	list: async (
+		opts: { guardId?: string; systemUserId?: string; firearmId?: string; zoneId?: string; eventType?: ActivityEventType; limit?: number } = {}
+	): Promise<ActivityLog[]> => apiFetch<ActivityLog[]>('/api/activity-logs', { query: opts })
+};
+
+// ---------------------------------------------------------------------------
+// Armorer tablet
+// ---------------------------------------------------------------------------
+
+export const tabletApi = {
+	clockIn: async (imageDataUrl?: string) => apiFetch<ActivityLog>('/api/tablet/clock-in', { method: 'POST', body: { imageDataUrl } }),
+	clockOut: async (imageDataUrl?: string) => apiFetch<ActivityLog>('/api/tablet/clock-out', { method: 'POST', body: { imageDataUrl } }),
+	queue: async () => apiFetch<{ pendingZoneEntry: any[]; pendingHandover: any[] }>('/api/tablet/queue'),
+	checkedOut: async () => (await apiFetch<any[]>('/api/tablet/checked-out')).map(mapFirearm)
 };

@@ -60,3 +60,9 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
 
 	return data as T;
 }
+
+/** Activity log photos are served from the backend (relative paths like "/uploads/xxx.jpg"), not the frontend origin. */
+export function resolveImageUrl(path: string | null | undefined): string | null {
+	if (!path) return null;
+	return new URL(path, PUBLIC_API_URL).toString();
+}

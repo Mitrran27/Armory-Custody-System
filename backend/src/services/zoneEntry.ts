@@ -4,6 +4,7 @@ import { zones, zoneSessions, guards, auditEventTypeEnum } from '../db/schema.js
 import { genId } from '../utils/ids.js';
 import { ApiError } from '../utils/asyncHandler.js';
 import { createAuditEvent } from './audit.js';
+import { createActivityLog } from './activityLog.js';
 import { hasApprovedZoneAccess } from './accessControl.js';
 
 type Gate = (typeof import('../db/schema.js').doorGateEnum.enumValues)[number];
@@ -19,12 +20,12 @@ const gateToAuditType: Record<Gate, (typeof auditEventTypeEnum.enumValues)[numbe
  * Admits a guard into a zone: checks zone_access authorization (logging a
  * security alert and refusing if it's missing on an authorization-gated
  * zone), opens a ZoneSession, updates guard + zone occupancy state, and
- * appends the corresponding audit event. Shared by the direct
- * POST /api/zones/:id/entry route and the QR door-scan flow so both go
- * through the exact same authorization + state-transition logic.
+ * appends the corresponding audit event and activity-log entry. Shared by
+ * the direct POST /api/zones/:id/entry route and the QR door-scan flow so
+ * both go through the exact same authorization + state-transition logic.
  */
-export async function admitGuardToZone(params: { guardId: string; zoneId: string; method: Gate }) {
-	const { guardId, zoneId, method } = params;
+export async function admitGuardToZone(params: { guardId: string; zoneId: string; method: Gate; imageUrl?: string | null }) {
+	const { guardId, zoneId, method, imageUrl = null } = params;
 
 	const [zone] = await db.select().from(zones).where(eq(zones.id, zoneId));
 	if (!zone) throw new ApiError(404, 'Zone not found.');
@@ -65,6 +66,15 @@ export async function admitGuardToZone(params: { guardId: string; zoneId: string
 			detail: `${guard.name} entered ${zone.label} via ${method.replace('_', ' ')}`
 		});
 
-		return { session, event };
+		const log = await createActivityLog(tx, {
+			eventType: 'zone_entry',
+			personName: guard.name,
+			guardId: guard.id,
+			zoneId: zone.id,
+			detail: `${guard.name} entered ${zone.label} via ${method.replace('_', ' ')}`,
+			imageUrl
+		});
+
+		return { session, event, log };
 	});
 }

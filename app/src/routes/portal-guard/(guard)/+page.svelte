@@ -7,13 +7,11 @@
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import PhotoCaptureModal from '$lib/components/PhotoCaptureModal.svelte';
-	import { QrCode, ShieldCheck, Clock, Loader2, RefreshCw, XCircle, LogIn, LogOut, ImageOff } from 'lucide-svelte';
-	import type { AccessRequest, ActivityLog } from '$lib/types';
+	import { QrCode, Loader2, RefreshCw, LogIn, LogOut, ImageOff } from 'lucide-svelte';
+	import type { ActivityLog } from '$lib/types';
 
-	let requests = $state<AccessRequest[]>([]);
 	let myLogs = $state<ActivityLog[]>([]);
 	let loading = $state(true);
-	let applying = $state(false);
 	let errorMsg = $state<string | null>(null);
 
 	let showQr = $state(false);
@@ -31,16 +29,13 @@
 	let clockAction = $state<'clock_in' | 'clock_out' | null>(null);
 	let clockBusy = $state(false);
 
-	const armoryRequest = $derived(requests.find((r) => r.type === 'zone_access') ?? null);
-	const firearmRequests = $derived(requests.filter((r) => r.type === 'firearm_assignment'));
-
 	async function load() {
 		loading = true;
 		errorMsg = null;
 		try {
-			[requests, myLogs] = await Promise.all([guardSelfApi.listMyAccessRequests(), guardSelfApi.myActivityLogs()]);
+			myLogs = await guardSelfApi.myActivityLogs();
 		} catch (err) {
-			errorMsg = err instanceof ApiError ? err.message : 'Failed to load your applications.';
+			errorMsg = err instanceof ApiError ? err.message : 'Failed to load your activity.';
 		} finally {
 			loading = false;
 		}
@@ -59,19 +54,6 @@
 			errorMsg = err instanceof ApiError ? err.message : 'Could not record that.';
 		} finally {
 			clockBusy = false;
-		}
-	}
-
-	async function applyForArmory() {
-		applying = true;
-		errorMsg = null;
-		try {
-			const req = await guardSelfApi.applyForArmory();
-			requests = [req, ...requests.filter((r) => r.id !== req.id)];
-		} catch (err) {
-			errorMsg = err instanceof ApiError ? err.message : 'Could not submit your application.';
-		} finally {
-			applying = false;
 		}
 	}
 
@@ -107,20 +89,14 @@
 		qrDataUrl = null;
 		stopCountdown();
 	}
-
-	function statusTone(status: string) {
-		if (status === 'approved') return 'clear';
-		if (status === 'pending') return 'caution';
-		return 'alert';
-	}
 </script>
 
-<svelte:head><title>Armory Access — Guard Portal</title></svelte:head>
+<svelte:head><title>Clock In/Out — Guard Portal</title></svelte:head>
 
 <div class="space-y-5">
 	<div>
 		<p class="eyebrow">{guardAuth.guard?.rank} {guardAuth.guard?.name}</p>
-		<h1 class="font-display text-xl font-semibold text-ink">Armory Access</h1>
+		<h1 class="font-display text-xl font-semibold text-ink">Clock In / Entry</h1>
 	</div>
 
 	{#if errorMsg}
@@ -143,70 +119,15 @@
 			</button>
 		</Panel>
 
-		<Panel eyebrow="Application" title="Zone C — Armory">
-			{#if !armoryRequest}
-				<p class="mb-4 text-[13px] text-ink-dim">You haven't applied for armory access yet.</p>
-				<button
-					onclick={applyForArmory}
-					disabled={applying}
-					class="flex w-full items-center justify-center gap-1.5 rounded-sm border border-accent/40 bg-accent-dim py-2.5 text-[13px] font-medium text-accent disabled:opacity-50"
-				>
-					{#if applying}<Loader2 size={14} class="animate-spin" />{:else}<ShieldCheck size={14} />{/if} Apply for Armory Access
-				</button>
-			{:else}
-				<div class="mb-4 flex items-center justify-between">
-					<span class="text-[13px] text-ink-dim">Status</span>
-					<StatusPill tone={statusTone(armoryRequest.status)} pulse={armoryRequest.status === 'pending'}>
-						{armoryRequest.status}
-					</StatusPill>
-				</div>
-
-				{#if armoryRequest.status === 'pending'}
-					<div class="flex items-start gap-2 rounded-sm border border-caution/30 bg-caution-dim/30 p-3">
-						<Clock size={15} class="mt-0.5 shrink-0 text-caution" />
-						<p class="text-[12px] text-ink-dim">Your application is awaiting admin review. Check back here for updates.</p>
-					</div>
-				{:else if armoryRequest.status === 'approved'}
-					<div class="mb-3 flex items-start gap-2 rounded-sm border border-clear/30 bg-clear-dim/30 p-3">
-						<ShieldCheck size={15} class="mt-0.5 shrink-0 text-clear" />
-						<p class="text-[12px] text-ink-dim">You're approved for armory access. Show your QR code at Door 1 to enter.</p>
-					</div>
-					<button
-						onclick={showQrCode}
-						class="flex w-full items-center justify-center gap-1.5 rounded-sm border border-accent/40 bg-accent-dim py-2.5 text-[13px] font-medium text-accent"
-					>
-						<QrCode size={15} /> Show Entry QR Code
-					</button>
-				{:else}
-					<div class="mb-3 flex items-start gap-2 rounded-sm border border-alert/30 bg-alert-dim/30 p-3">
-						<XCircle size={15} class="mt-0.5 shrink-0 text-alert" />
-						<p class="text-[12px] text-ink-dim">
-							Your application was {armoryRequest.status}{#if armoryRequest.notes}: {armoryRequest.notes}{/if}. You can apply again below.
-						</p>
-					</div>
-					<button
-						onclick={applyForArmory}
-						disabled={applying}
-						class="flex w-full items-center justify-center gap-1.5 rounded-sm border border-accent/40 bg-accent-dim py-2.5 text-[13px] font-medium text-accent disabled:opacity-50"
-					>
-						{#if applying}<Loader2 size={14} class="animate-spin" />{:else}<ShieldCheck size={14} />{/if} Apply Again
-					</button>
-				{/if}
-			{/if}
+		<Panel eyebrow="Building access" title="Door 1 — Entry / Exit">
+			<p class="mb-4 text-[13px] text-ink-dim">Show this QR code at the outer door to come in or go out.</p>
+			<button
+				onclick={showQrCode}
+				class="flex w-full items-center justify-center gap-1.5 rounded-sm border border-accent/40 bg-accent-dim py-2.5 text-[13px] font-medium text-accent"
+			>
+				<QrCode size={15} /> Show Entry QR Code
+			</button>
 		</Panel>
-
-		{#if firearmRequests.length}
-			<Panel eyebrow="Also on file" title="Firearm assignment requests">
-				<ul class="space-y-2">
-					{#each firearmRequests as r (r.id)}
-						<li class="flex items-center justify-between rounded-sm border border-line bg-panel-raised px-3 py-2 text-[12px]">
-							<span class="text-ink">{r.firearmLabel ?? r.firearmId}</span>
-							<StatusPill tone={statusTone(r.status)}>{r.status}</StatusPill>
-						</li>
-					{/each}
-				</ul>
-			</Panel>
-		{/if}
 
 		<Panel eyebrow="History" title="My activity log">
 			<ul class="space-y-2">

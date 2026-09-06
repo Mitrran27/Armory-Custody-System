@@ -111,8 +111,8 @@ There's no password field anywhere in this system — sign-in is email + a
 one-time code.
 
 ```
-POST /api/auth/request-otp   { "email": "ramli.ahmad@mda.gov.my" }
-POST /api/auth/verify-otp    { "email": "ramli.ahmad@mda.gov.my", "code": "123456" }
+POST /api/auth/request-otp   { "email": "mitrran@cre8iot.com" }
+POST /api/auth/verify-otp    { "email": "mitrran@cre8iot.com", "code": "123456" }
 ```
 
 `verify-otp` returns `{ token, user }`. Send `token` back as
@@ -132,18 +132,17 @@ Every seeded system user logs in with the same dev OTP:
 
 | Email | Role |
 |---|---|
-| ramli.ahmad@mda.gov.my | admin |
-| siti.rahmah@mda.gov.my | duty_officer |
-| zainal.abidin@mda.gov.my | armorer |
-| halim.mokhtar@mda.gov.my | armorer |
-| aisyah.nordin@mda.gov.my | auditor |
+| mitrran@cre8iot.com | admin |
+| jeevasulogan@cre8iot.com | duty_officer |
+| sasitheran@cre8iot.com | armorer |
+| pathma@cre8iot.com | admin |
 
 ---
 
 ## Roles & permissions
 
-Four roles, matching the frontend's System Users page exactly:
-`admin`, `duty_officer`, `armorer`, `auditor`.
+Three roles, matching the frontend's System Users page exactly:
+`admin`, `duty_officer`, `armorer`.
 
 | Resource | Read | Create | Update | Delete / Restore |
 |---|---|---|---|---|

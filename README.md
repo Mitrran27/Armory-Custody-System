@@ -2,8 +2,9 @@
 
 Two applications sharing one PostgreSQL database:
 
-- **`app/`** — the staff dashboard (SvelteKit) at `/`, plus a separate
-  guard-facing installable PWA at `/portal`.
+- **`app/`** — the staff dashboard (SvelteKit) at `/`, plus two separate
+  installable PWAs: `/portal-armorer` (armory access + entry QR) and
+  `/portal-guard` (clock in/out + entry QR).
 - **`backend/`** — the API (Express + Drizzle ORM) both of the above talk to.
 
 No mock data anywhere — every screen reads from and writes to the real
@@ -85,11 +86,13 @@ why, and what swapping in real email delivery would look like).
 | `jeevasulogan@cre8iot.com` | duty_officer |
 | `sasitheran@cre8iot.com` | armorer |
 | `pathma@cre8iot.com` | admin |
-| `test@cre8iot.com` | auditor |
 
-**Guard portal** (`http://localhost:5173/portal`) — same OTP flow, same dev
-code, but a completely separate login from the table above (see "Two
-separate front doors" below).
+**Armorer portal** (`http://localhost:5173/portal-armorer`) — applies for
+armory access, checks status, shows the entry QR once approved. Same OTP
+flow, same dev code, but a completely separate login from the table above
+(see "Two separate front doors" below) — this authenticates against the
+`guards` table, not `system_users`, even though the person is called an
+"armorer" here.
 
 | Guard email | Name | Good for testing |
 |---|---|---|
@@ -99,6 +102,15 @@ separate front doors" below).
 | `d.johnson@mg.com` | Cpl D.Johnson | Has a pending *firearm-assignment* request already on file (shows in "Also on file") |
 | `tony.stark@mg.com` | Pte Tony Stark | Already has a **pending** armory-access application — open this one to see the pending badge immediately |
 | `vijay@mg.com` | Sgt Vijay | Account status is `suspended` — login and apply are both correctly refused |
+
+**Guard portal** (`http://localhost:5173/portal-guard`) — the simpler of
+the two: clock in/out and a general entry QR for Door 1, no armory
+application flow. Same login mechanism and the same seeded accounts as the
+armorer portal above (any of those emails works here too) — the two
+portals are different UIs over the same guard accounts, not two different
+kinds of accounts.
+
+**Armorer tablet** (`http://localhost:5173/tablet`) — the fixed device an armorer stationed in the armory uses. Same staff login as the main dashboard (armorers are already system users, no third auth system) — `sasitheran@cre8iot.com` / `123456`.
 
 ---
 
@@ -135,9 +147,9 @@ behalf; only an admin can approve, reject, or revoke one. Denied attempts
 at the door or at checkout are logged as `critical` audit alerts, not just
 silently blocked.
 
-**System Users** — admin-only account management for the four RBAC roles
-(admin, duty officer, armorer, auditor), each with a description pulled
-from a real `roles` table rather than hardcoded labels.
+**System Users** — admin-only account management for the three RBAC roles
+(admin, duty officer, armorer), each with a description pulled from a real
+`roles` table rather than hardcoded labels.
 
 **Audit Trail** — filterable, and genuinely append-only: every event is
 SHA-256 hash-chained to the one before it (`npm run verify-audit-chain` in
@@ -157,32 +169,41 @@ reads clearest against dark chrome regardless of the rest of the app.
 
 ---
 
-## The guard portal (`/portal`) — a separate PWA, a separate login
+## Two portals, one login mechanism — `/portal-armorer` and `/portal-guard`
 
-Guards don't use the staff dashboard at all. They have their own
-installable Progressive Web App:
+Neither uses the staff dashboard at all. Both are installable Progressive
+Web Apps, both authenticate against the same `guards` table with the same
+OTP flow — they're two different UIs over the same accounts, not two kinds
+of accounts. Which portal a given screenshot or account "is" depends
+entirely on which URL you visited, not on any field in the database.
 
-- **Real installability** — `manifest.webmanifest` (`start_url: /portal`),
-  a service worker (network-first; this app is fundamentally online, so the
-  service worker exists to make it installable and to ride out a network
-  blip, not to fake offline access to live data), and a generated icon set.
+- **Real installability, per portal** — each has its own
+  `manifest-armorer.webmanifest` / `manifest-guard.webmanifest`
+  (`start_url: /portal-armorer` / `/portal-guard` respectively), injected
+  by that route's own layout rather than a single app-wide manifest, so
+  "Add to Home Screen" installs the right one depending on which portal
+  you're actually on. One shared service worker (network-first; this app
+  is fundamentally online, so it exists to make both installable and to
+  ride out a network blip, not to fake offline access to live data).
 - **A completely separate session type from staff**, even though the login
   *flow* looks identical (email → OTP). A guard's JWT carries `type: 'guard'`
   and no `role` field at all — there's no code path where a guard session
   could be mistaken for, or reused as, staff credentials. Guards even have
   their own OTP table, separate from the system users' one.
-- **Apply for armory access** — idempotent: applying while a pending or
-  approved request already exists just returns that existing one instead of
-  filing a duplicate.
-- **Live status** — pending / approved / rejected, reflecting whatever an
-  admin has decided, checked against the real database on every visit.
-- **A real QR code once approved** — rendered client-side from the same
+- **`/portal-armorer`** — apply for armory access (idempotent: applying
+  while a pending or approved request already exists just returns that
+  existing one instead of filing a duplicate), live status
+  (pending/approved/rejected), and a real QR code once approved.
+- **`/portal-guard`** — clock in/out, plus the same QR mechanism scoped to
+  Door 1 (the general outer-door entry, not the armory specifically) so a
+  guard can badge in and out of the building day to day.
+- **The QR code is real on both** — rendered client-side from the same
   one-time-token mechanism the staff-issued version uses, just scoped to
-  the guard's own account. Every time the QR view is opened, a **genuinely
-  new one-time code** is issued (the old one is invalidated) — this was
-  confirmed by capturing two separate opens over the network and diffing
-  the codes, not assumed. A live countdown shows time to expiry; after it
-  lapses, a "Get a new code" button issues another.
+  the account's own guard record. Every time the QR view is opened, a
+  **genuinely new one-time code** is issued (the old one is invalidated) —
+  this was confirmed by capturing two separate opens over the network and
+  diffing the codes, not assumed. A live countdown shows time to expiry;
+  after it lapses, a "Get a new code" button issues another.
 
 ---
 
@@ -285,3 +306,63 @@ A few things worth knowing if you're extending the schema:
   screenshots of the real rendered UI, network requests captured and
   diffed — but that's manual verification done once while building, not a
   regression-proof test file that runs on every future change.
+### Activity Log, photo capture, the armorer tablet, and camera POV rendering
+
+A second, separate operational log (deliberately not the audit trail), photo
+evidence at every physical action, a third distinct portal for armorers, and
+a real per-camera view in Live Monitoring.
+
+- **A new `activity_logs` table — genuinely separate from the audit trail.**
+  The audit trail (`audit_events`) stays exactly what it was: a
+  tamper-evident, hash-chained security record with no edit/delete route
+  for anyone, ever. `activity_logs` is a plain, ordinary table for
+  day-to-day "who did what, when, with a photo" — clock-ins, zone
+  entry/exit, firearm handover, and firearm servicing. The same real-world
+  action (a checkout, an entry) writes to *both* tables, atomically, in the
+  same transaction — they're two different records of the same event kept
+  for two different purposes, not one replacing the other.
+- **Photo capture is real, using the device's actual camera** (`getUserMedia`
+  via `CameraCapture.svelte`), not a placeholder. A captured photo is sent
+  as base64, saved to disk under `backend/uploads/`, and served back at a
+  real URL referenced from the log row. Verified with a genuinely fresh
+  photo on every capture, and confirmed the "skip photo" path also works
+  and correctly leaves `imageUrl: null`.
+- **Armorers clock in the same way guards do**, and get their own tablet at
+  `/tablet` — reusing the *existing* staff login rather than inventing a
+  third auth system, since an armorer is already a system user. From there:
+  a duty-status toggle, a queue of guards approved for armory entry, a
+  queue of firearms approved to hand over (with guard details visible before
+  handing one over), a list of currently-checked-out firearms to receive
+  back, and the regular service routine below — all photo-backed.
+- **The regular service routine — chamber clearance and cleaning — are their
+  own loggable, timestamped, photo-evidenced actions**, distinct from the
+  more formal "assign a repair" maintenance workflow. Recording a service
+  action on a firearm sitting in "maintenance" status returns it to
+  "in_armory" — the servicing is what makes it usable again.
+- **Guard and Firearm detail pages now show a real Activity Log** — photo
+  thumbnails, click to enlarge, pulled from the same table as everywhere
+  else above. The Firearm page's existing Maintenance Log is untouched and
+  sits alongside it; they're different things.
+- **Live Monitoring: clicking a camera now shows an actual second render of
+  the facility from that camera's own position and field of view** — a real
+  picture-in-picture Three.js camera pointed where the physical camera
+  would be pointed, not a static image or a fake video loop. Alongside it,
+  a "Who's on camera" panel shows a real, data-backed timeline of who's
+  been coming and going in that camera's zone (guard or staff, clocked in,
+  entered, exited, clocked out), pulled from the same Activity Log.
+- **Fixed a real notification dropdown stacking bug** — the top bar's
+  `backdrop-blur` creates an implicit CSS stacking context, but the bar had
+  no `z-index` of its own, so its position in the paint order relative to
+  other positioned elements (like the Live Monitoring overlays) was
+  ambiguous. Fixed by giving the header an explicit `z-40` and the dropdown
+  `z-50`, rather than just bumping one number and hoping.
+- **"Actor" renamed to "Person"** in the Audit Trail table and search box.
+
+**How this was verified:** the same screenshot- and network-request-driven
+process as the rest of this changelog. Notably: captured two separate
+photos in a row and confirmed the backend produced two different file
+URLs, not the same one reused; triggered a real zone entry via the API and
+watched it appear in the Live Monitoring "Who's on camera" panel end to
+end; and switched between two cameras in Live Monitoring and confirmed the
+picture-in-picture genuinely re-rendered from a different position and
+angle each time, not the same frozen frame relabeled.

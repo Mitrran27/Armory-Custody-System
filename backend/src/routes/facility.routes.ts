@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { admitGuardToZone } from '../services/zoneEntry.js';
 import { createAuditEvent } from '../services/audit.js';
+import { saveCapturedImage } from '../utils/imageStorage.js';
 
 export const facilityRouter = Router();
 facilityRouter.use(requireAuth);
@@ -41,7 +42,7 @@ facilityRouter.get(
 
 // --- QR gate: redeem a code issued by POST /api/guards/:id/qr-token ----
 
-const scanSchema = z.object({ code: z.string().min(1), guardId: z.string().min(1) });
+const scanSchema = z.object({ code: z.string().min(1), guardId: z.string().min(1), imageDataUrl: z.string().optional() });
 
 /**
  * "Door 1 cut into the west wall, with the QR scanner mounted just outside
@@ -58,7 +59,7 @@ facilityRouter.post(
 	'/doors/:doorId/scan',
 	requireRole('admin', 'duty_officer', 'armorer'),
 	asyncHandler(async (req, res) => {
-		const { code, guardId } = scanSchema.parse(req.body);
+		const { code, guardId, imageDataUrl } = scanSchema.parse(req.body);
 		const doorId = pid(req.params.doorId);
 
 		const [door] = await db.select().from(doors).where(and(eq(doors.id, doorId), isNull(doors.deletedAt)));
@@ -108,7 +109,8 @@ facilityRouter.post(
 
 		await db.update(qrTokens).set({ consumedAt: new Date() }).where(eq(qrTokens.id, token.id));
 
-		const result = await admitGuardToZone({ guardId, zoneId: room.id, method: 'qr' });
+		const imageUrl = imageDataUrl ? await saveCapturedImage(imageDataUrl) : null;
+		const result = await admitGuardToZone({ guardId, zoneId: room.id, method: 'qr', imageUrl });
 		res.status(201).json(result);
 	})
 );

@@ -115,7 +115,7 @@
 	}
 </script>
 
-<svelte:head><title>Armory Access — Guard Portal</title></svelte:head>
+<svelte:head><title>Armory Access — Armorer Portal</title></svelte:head>
 
 <div class="space-y-5">
 	<div>

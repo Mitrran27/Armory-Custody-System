@@ -5,10 +5,10 @@
 	import RoomScene3D from '$lib/components/RoomScene3D.svelte';
 	import LayoutPanel from '$lib/components/LayoutPanel.svelte';
 	import { live } from '$lib/stores/live.svelte';
-	import { facilityApi, camerasApi, guardsApi, firearmsApi } from '$lib/api/resources';
-	import { ApiError } from '$lib/api/client';
-	import { Video, VideoOff, RotateCw, Loader2, Maximize2, Eye } from 'lucide-svelte';
-	import type { RoomConfig, DoorConfig, QrScannerConfig, CameraConfig, Guard, Firearm, ZoneId } from '$lib/types';
+	import { facilityApi, camerasApi, guardsApi, firearmsApi, activityLogsApi } from '$lib/api/resources';
+	import { ApiError, resolveImageUrl } from '$lib/api/client';
+	import { Video, VideoOff, RotateCw, Loader2, Maximize2, Eye, ImageOff, ShieldUser, UserCog } from 'lucide-svelte';
+	import type { RoomConfig, DoorConfig, QrScannerConfig, CameraConfig, Guard, Firearm, ZoneId, ActivityLog } from '$lib/types';
 
 	let rooms = $state<RoomConfig[]>([]);
 	let doors = $state<DoorConfig[]>([]);
@@ -21,6 +21,21 @@
 
 	let selectedCameraId = $state<string | null>(null);
 	const selectedCamera = $derived(cameras.find((c) => c.id === selectedCameraId) ?? null);
+
+	// The picture-in-picture render (see RoomScene3D) shows what the camera
+	// sees geometrically; this is the "who" side of it — a real, data-backed
+	// feed of who's been coming and going in that camera's zone, not just a
+	// still occupant list.
+	let zoneActivity = $state<ActivityLog[]>([]);
+	$effect(() => {
+		if (!selectedCamera) {
+			zoneActivity = [];
+			return;
+		}
+		activityLogsApi.list({ zoneId: selectedCamera.zone, limit: 15 }).then((logs) => {
+			zoneActivity = logs;
+		});
+	});
 
 	// Camera fly-to-room focus + the floating "click to view layout" button
 	let focusedZoneId = $state<ZoneId | null>(null);
@@ -53,6 +68,17 @@
 	function guardName(id: string) {
 		return guards.find((g) => g.id === id)?.name ?? id;
 	}
+
+	const EVENT_LABEL: Record<string, string> = {
+		clock_in: 'Clocked in',
+		clock_out: 'Clocked out',
+		zone_entry: 'Entered',
+		zone_exit: 'Exited',
+		firearm_taken: 'Took firearm',
+		firearm_returned: 'Returned firearm',
+		chamber_clearance: 'Chamber clearance',
+		cleaning: 'Cleaning'
+	};
 </script>
 
 <svelte:head><title>Live Monitoring — AAWCS</title></svelte:head>
@@ -157,6 +183,31 @@
 						</div>
 						<div class="flex justify-between"><dt class="text-ink-dim">Status</dt><dd><StatusPill tone={selectedCamera.status === 'online' ? 'clear' : 'alert'}>{selectedCamera.status}</StatusPill></dd></div>
 					</dl>
+				</Panel>
+
+				<Panel eyebrow="Who's on camera" title="Zone activity">
+					<ul class="max-h-72 space-y-2 overflow-y-auto">
+						{#each zoneActivity as log (log.id)}
+							<li class="flex items-center gap-2.5 rounded-sm border border-line bg-panel-raised p-2">
+								{#if log.imageUrl}
+									<img src={resolveImageUrl(log.imageUrl)} alt="" class="h-8 w-8 shrink-0 rounded-sm object-cover" />
+								{:else}
+									<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-panel text-ink-faint">
+										{#if log.guardId}<ShieldUser size={13} />{:else}<UserCog size={13} />{/if}
+									</div>
+								{/if}
+								<div class="min-w-0 flex-1">
+									<p class="truncate text-[11px] text-ink">
+										<span class="text-ink-dim">{log.guardId ? 'Guard' : 'Staff'} ·</span>
+										{log.personName} — {EVENT_LABEL[log.eventType] ?? log.eventType}
+									</p>
+									<p class="text-[10px] text-ink-dim">{new Date(log.timestamp).toLocaleString('en-MY')}</p>
+								</div>
+							</li>
+						{:else}
+							<li class="text-[12px] text-ink-dim">No activity recorded for this zone yet.</li>
+						{/each}
+					</ul>
 				</Panel>
 			{/if}
 

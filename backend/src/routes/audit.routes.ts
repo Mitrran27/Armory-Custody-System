@@ -22,7 +22,9 @@ const listQuerySchema = z.object({
 			'maintenance',
 			'override',
 			'admin_action',
-			'alert'
+			'alert',
+			'clock_in',
+			'clock_out'
 		])
 		.optional(),
 	severity: z.enum(['info', 'warning', 'critical']).optional(),

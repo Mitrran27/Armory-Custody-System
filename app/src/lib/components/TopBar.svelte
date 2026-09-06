@@ -41,7 +41,7 @@
 	}
 </script>
 
-<header class="flex h-14 shrink-0 items-center justify-between border-b border-line bg-panel/60 px-5 backdrop-blur">
+<header class="relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-line bg-panel/60 px-5 backdrop-blur">
 	<div class="flex items-center gap-2">
 		{#each zoneOrder as z (z.id)}
 			{@const state = live.zones[z.id]}
