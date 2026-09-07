@@ -2,16 +2,14 @@
 	import { onMount } from 'svelte';
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import ActivityLogTable from '$lib/components/ActivityLogTable.svelte';
-	import { usersApi, rolesApi, activityLogsApi } from '$lib/api/resources';
+	import { usersApi, rolesApi } from '$lib/api/resources';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { ApiError } from '$lib/api/client';
 	import { Plus, ShieldCheck, ShieldAlert, Loader2, Ban } from 'lucide-svelte';
-	import type { SystemUser, SystemRole, ActivityLog } from '$lib/types';
+	import type { SystemUser, SystemRole } from '$lib/types';
 
 	let users = $state<SystemUser[]>([]);
 	let roleList = $state<{ id: SystemRole; label: string; description: string }[]>([]);
-	let staffLogs = $state<ActivityLog[]>([]);
 	let loading = $state(true);
 	let errorMsg = $state<string | null>(null);
 	let showCreate = $state(false);
@@ -24,16 +22,9 @@
 		loading = true;
 		errorMsg = null;
 		try {
-			const [u, roles, logs] = await Promise.all([usersApi.list(), rolesApi.list(), activityLogsApi.list({ limit: 100 })]);
+			const [u, roles] = await Promise.all([usersApi.list(), rolesApi.list()]);
 			users = u;
 			roleList = roles;
-			// Staff-initiated events only — clock in/out, servicing, handovers
-			// they processed — not guard-initiated ones (those live on the
-			// Guards page's own Activity Log). This is "the armorer's logs":
-			// armorers are system users, and this covers any staff role, not
-			// just armorers specifically, since duty officers and admins can
-			// also perform some of these actions.
-			staffLogs = logs.filter((l) => l.systemUserId);
 		} catch (err) {
 			errorMsg = err instanceof ApiError ? err.message : 'Failed to load system users.';
 		} finally {
@@ -69,7 +60,7 @@
 	}
 </script>
 
-<svelte:head><title>System Users — AAWCS</title></svelte:head>
+<svelte:head><title>System Users — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="mx-auto max-w-[1400px] space-y-6">
 	<div class="flex items-end justify-between">
@@ -165,10 +156,6 @@
 				</table>
 			</div>
 			{/if}
-		</Panel>
-
-		<Panel eyebrow="Armorer & staff activity" title="Activity log">
-			<ActivityLogTable logs={staffLogs} emptyMessage="No staff-initiated activity recorded yet." />
 		</Panel>
 	{/if}
 </div>

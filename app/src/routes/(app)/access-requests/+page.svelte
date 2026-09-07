@@ -93,7 +93,7 @@
 	}
 </script>
 
-<svelte:head><title>Access Requests — AAWCS</title></svelte:head>
+<svelte:head><title>Access Requests — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="mx-auto max-w-[1400px] space-y-6">
 	<div class="flex items-end justify-between">

@@ -192,7 +192,7 @@
 	}
 </script>
 
-<svelte:head><title>Firearms — AAWCS</title></svelte:head>
+<svelte:head><title>Firearms — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="mx-auto max-w-[1400px] space-y-6">
 	<div class="flex items-end justify-between">

@@ -41,7 +41,7 @@
 	}
 </script>
 
-<svelte:head><title>Dashboard — AAWCS</title></svelte:head>
+<svelte:head><title>Dashboard — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="mx-auto max-w-[1400px] space-y-6">
 	<div>

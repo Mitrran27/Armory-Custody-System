@@ -1,5 +1,5 @@
 {
-	"name": "AAWCS Guard Portal",
+	"name": "EVI-Armory Guard Vision — Guard Portal",
 	"short_name": "Guard",
 	"description": "Clock in/out and show your entry QR code.",
 	"start_url": "/portal-guard",

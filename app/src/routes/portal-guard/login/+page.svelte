@@ -42,7 +42,7 @@
 </script>
 
 <svelte:head>
-	<title>Sign in — AAWCS Guard Portal</title>
+	<title>Sign in — Guard Portal</title>
 	<link rel="manifest" href="/manifest-guard.webmanifest" />
 </svelte:head>
 
@@ -53,8 +53,8 @@
 				<ShieldHalf size={18} strokeWidth={2} />
 			</div>
 			<div class="leading-tight">
-				<p class="font-display text-sm font-semibold text-ink">AAWCS Guard Portal</p>
-				<p class="text-[10px] text-ink-dim">Clock in/out & entry QR</p>
+				<p class="font-display text-sm font-semibold text-ink">EVI-Armory Guard Vision</p>
+				<p class="text-[10px] text-ink-dim">Guard Portal — Clock in/out &amp; entry QR</p>
 			</div>
 		</div>
 

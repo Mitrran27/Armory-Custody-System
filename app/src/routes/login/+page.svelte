@@ -41,7 +41,7 @@
 	}
 </script>
 
-<svelte:head><title>Sign in — AAWCS</title></svelte:head>
+<svelte:head><title>Sign in — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="flex min-h-screen w-full items-center justify-center bg-base p-6">
 	<div class="bracket-frame w-full max-w-sm rounded-sm border border-line bg-panel p-6">
@@ -50,7 +50,7 @@
 				<ShieldHalf size={18} strokeWidth={2} />
 			</div>
 			<div class="leading-tight">
-				<p class="font-display text-sm font-semibold text-ink">AAWCS</p>
+				<p class="font-display text-sm font-semibold text-ink">EVI-Armory Guard Vision</p>
 				<p class="text-[10px] text-ink-dim">Armory Custody System</p>
 			</div>
 		</div>

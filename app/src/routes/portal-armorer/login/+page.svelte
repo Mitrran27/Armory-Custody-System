@@ -42,7 +42,7 @@
 </script>
 
 <svelte:head>
-	<title>Sign in — AAWCS Armorer Portal</title>
+	<title>Sign in — Armorer Portal</title>
 	<link rel="manifest" href="/manifest-armorer.webmanifest" />
 </svelte:head>
 
@@ -53,8 +53,8 @@
 				<ShieldHalf size={18} strokeWidth={2} />
 			</div>
 			<div class="leading-tight">
-				<p class="font-display text-sm font-semibold text-ink">AAWCS Armorer Portal</p>
-				<p class="text-[10px] text-ink-dim">Armory access & entry QR</p>
+				<p class="font-display text-sm font-semibold text-ink">EVI-Armory Guard Vision</p>
+				<p class="text-[10px] text-ink-dim">Armorer Portal — Armory access &amp; entry QR</p>
 			</div>
 		</div>
 

@@ -81,7 +81,7 @@
 	};
 </script>
 
-<svelte:head><title>Live Monitoring — AAWCS</title></svelte:head>
+<svelte:head><title>Live Monitoring — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="mx-auto flex h-full max-w-[1600px] flex-col gap-6">
 	<div class="flex items-end justify-between">

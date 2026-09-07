@@ -1,5 +1,5 @@
 {
-	"name": "AAWCS Armorer Portal",
+	"name": "EVI-Armory Guard Vision — Armorer Portal",
 	"short_name": "Armorer",
 	"description": "Apply for armory access and show your entry QR code.",
 	"start_url": "/portal-armorer",

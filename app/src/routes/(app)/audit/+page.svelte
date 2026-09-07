@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import Panel from '$lib/components/Panel.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import ActivityLogTable from '$lib/components/ActivityLogTable.svelte';
@@ -8,7 +9,10 @@
 	import { Search, Download, ShieldCheck, Loader2 } from 'lucide-svelte';
 	import type { AuditEvent, AuditEventType, AuditSeverity, ActivityLog } from '$lib/types';
 
-	let scope = $state<'system' | 'firearm'>('system');
+	// Which scope to show is picked from the sidebar (System / Firearm sub-links
+	// under Audit Trail), not an in-page control — so it's a real URL
+	// (/audit?scope=system|firearm), not local component state.
+	const scope = $derived((page.url.searchParams.get('scope') === 'firearm' ? 'firearm' : 'system') as 'system' | 'firearm');
 
 	let events = $state<AuditEvent[]>([]);
 	let firearmLogs = $state<ActivityLog[]>([]);
@@ -98,7 +102,7 @@
 	}
 </script>
 
-<svelte:head><title>Audit Trail — AAWCS</title></svelte:head>
+<svelte:head><title>Audit Trail — EVI-Armory Guard Vision</title></svelte:head>
 
 <div class="mx-auto max-w-[1400px] space-y-6">
 	<div class="flex items-end justify-between">
@@ -128,13 +132,6 @@
 
 	<Panel padded={false}>
 		<div class="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
-			<select
-				bind:value={scope}
-				class="rounded-sm border border-accent/40 bg-accent-dim px-2.5 py-1.5 text-[12px] font-medium text-accent focus:outline-none"
-			>
-				<option value="system">System</option>
-				<option value="firearm">Firearm</option>
-			</select>
 			<div class="relative flex-1 min-w-[220px]">
 				<Search size={14} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-faint" />
 				<input
